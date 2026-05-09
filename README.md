@@ -49,6 +49,7 @@ curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scr
 - Agent 原生：OpenClaw/Hermes 等工具只需要提交结构化 JSON，序时负责可靠调度。
 - 本地优先：默认监听 `127.0.0.1`，使用本地 token，不依赖云端账号。
 - 日常语义：支持固定时间、尽快、时间窗、截止、循环、完成确认、错过补偿和未完成跟进。
+- Agent 投递：提醒任务可通过 `executor_id` 投递到 OpenClaw/Hermes/webhook/command；未配置 executor 时只走本地系统通知。
 - 中国日历：内置中国大陆 2026 年节假日和调休数据，按节日名称分组。
 - 可审计：每次触发生成 run 记录，支持 callback 更新长任务最终状态。
 - 可分发：提供 wheel、PyInstaller 二进制构建脚本和 OpenClaw 插件骨架。
@@ -143,6 +144,23 @@ OpenClaw/Hermes executor 支持 webhook 或命令行真实触发：
 ```powershell
 uv run xushi executor .\executor.openclaw.json
 ```
+
+通过 OpenClaw 插件也可以使用 `xushi_save_executor` 保存执行器。
+
+提醒要真正发给 agent，需要在任务 action 上引用执行器：
+
+```json
+{
+  "type": "reminder",
+  "executor_id": "openclaw",
+  "payload": {
+    "message": "该喝水了",
+    "channel": "feishu"
+  }
+}
+```
+
+如果 `reminder` 没有 `executor_id`，序时只会尝试本地桌面通知；在无桌面的 Linux 服务器上通常只能留下 fallback 记录。
 
 长任务完成后可回调：
 

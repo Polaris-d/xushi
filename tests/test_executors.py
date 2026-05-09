@@ -68,6 +68,48 @@ def test_webhook_executor_posts_action_payload() -> None:
     assert RecordingHandler.received[0]["body"]["payload"] == {"prompt": "生成日报"}
 
 
+def test_reminder_with_executor_posts_to_agent_webhook() -> None:
+    server, url = _start_server()
+    try:
+        executor = Executor(
+            id="openclaw",
+            kind="openclaw",
+            name="OpenClaw",
+            config={"webhook_url": url, "token": "secret"},
+        )
+        action = Action(
+            type="reminder",
+            executor_id="openclaw",
+            payload={"title": "喝水", "message": "该喝水了"},
+        )
+
+        result = ExecutorRegistry().execute(action, executor)
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert result["delivered"] is True
+    assert result["executor"] == "openclaw"
+    assert RecordingHandler.received[0]["authorization"] == "Bearer secret"
+    assert RecordingHandler.received[0]["body"]["payload"] == {
+        "title": "喝水",
+        "message": "该喝水了",
+    }
+
+
+def test_reminder_with_missing_executor_fails_instead_of_local_fallback() -> None:
+    action = Action(
+        type="reminder",
+        executor_id="missing",
+        payload={"title": "喝水", "message": "该喝水了"},
+    )
+
+    result = ExecutorRegistry().execute(action, executor=None)
+
+    assert result["delivered"] is False
+    assert result["error"] == "executor not found"
+
+
 def test_openclaw_executor_delegates_to_webhook_when_configured() -> None:
     server, url = _start_server()
     try:

@@ -90,7 +90,7 @@ SQLite 连接按操作短连接打开并立即关闭，避免 Windows 下 daemon
 
 配置优先级为环境变量高于配置文件高于默认值。默认配置文件位于状态目录下的 `config.json`，`xushi init` 可生成本地 token、SQLite 路径、监听地址、端口和后台扫描间隔；`xushi doctor` 用于检查配置文件、数据库目录和端口占用，帮助 agent 插件给出可执行的错误提示。
 
-OpenClaw/Hermes executor 不直接绑定某个外部 SDK。v1 通过配置 `webhook_url` 或 `command` 触发真实 agent；未配置时返回失败，避免模板假成功。Webhook 请求体包含 executor 摘要和 action payload，支持 Bearer token。
+OpenClaw/Hermes executor 不直接绑定某个外部 SDK。v1 通过配置 `webhook_url` 或 `command` 触发真实 agent；未配置时返回失败，避免模板假成功。Webhook 请求体包含 executor 摘要和 action payload，支持 Bearer token。`reminder` action 在配置 `executor_id` 时会走对应 executor；没有 `executor_id` 时才走本地系统通知。
 
 长任务可在启动后异步回调 `POST /api/v1/runs/{id}/callback`，将运行记录更新为 `succeeded` 或 `failed`，并合并最终结果。
 
@@ -119,6 +119,7 @@ OpenClaw/Hermes executor 不直接绑定某个外部 SDK。v1 通过配置 `webh
 - `openclaw.plugin.json` 声明插件 ID、配置 schema、工具契约。
 - `package.json#openclaw` 声明 TS 源入口和 JS 运行时入口。
 - 注册工具：`xushi_health`、`xushi_create_task`、`xushi_list_tasks`、`xushi_get_task`、`xushi_trigger_task`、`xushi_confirm_run`、`xushi_callback_run`、`xushi_install_hint`。
+- 注册执行器工具：`xushi_list_executors`、`xushi_save_executor`，用于配置 OpenClaw/Hermes/webhook/command 投递链路。
 - 插件读取 `XUSHI_BASE_URL` 和 `XUSHI_API_TOKEN`，默认连接本机 daemon。
 
 ## 8. 分发设计
@@ -152,3 +153,4 @@ OpenClaw/Hermes executor 不直接绑定某个外部 SDK。v1 通过配置 `webh
 | 2026-05-09 | 新增 | 增加 GitHub 风格 README、MIT License、agent 安装指南和跨平台安装脚本。 |
 | 2026-05-09 | 新增 | 增加 `.gitattributes` 跨平台换行规范和 tag 发布 Release 工作流。 |
 | 2026-05-09 | 新增 | 增加社区健康文件、Issue 模板和 PR 模板。 |
+| 2026-05-09 | 更正 | 修复 reminder action 忽略 executor 的路由问题，并补充 OpenClaw executor 配置工具。 |

@@ -63,7 +63,7 @@ export default definePluginEntry({
     api.registerTool({
       name: "xushi_create_task",
       description:
-        "创建结构化序时任务。请先把用户自然语言转换为 xushi task schema：schedule 必须包含 timezone；尽快任务用 asap，一次性任务用 ISO run_at，循环任务用 RRULE。",
+        "创建结构化序时任务。请先把用户自然语言转换为 xushi task schema：schedule 必须包含 timezone；尽快任务用 asap，一次性任务用 ISO run_at，循环任务用 RRULE。若用户希望提醒通过 OpenClaw/飞书等 agent 渠道送达，请先配置 executor，并在 task.action.executor_id 中引用它。",
       parameters: Type.Object({
         task: Type.Record(Type.String(), Type.Any(), {
           description: "符合 xushi TaskCreate schema 的任务 JSON。",
@@ -151,6 +151,35 @@ export default definePluginEntry({
               result: params.result ?? {},
               error: params.error,
             }),
+          }),
+        );
+      },
+    });
+
+    api.registerTool({
+      name: "xushi_list_executors",
+      description: "列出本机 xushi 执行器配置，用于确认 OpenClaw/Hermes/webhook/command 投递链路是否可用。",
+      parameters: Type.Object({}),
+      async execute() {
+        return textResult(await xushiRequest(config, "/api/v1/executors"));
+      },
+    });
+
+    api.registerTool({
+      name: "xushi_save_executor",
+      description:
+        "创建或更新 xushi 执行器。OpenClaw/Hermes executor 必须配置 webhook_url 或 command，否则 daemon 无法主动把提醒发给 agent。",
+      parameters: Type.Object({
+        executor: Type.Record(Type.String(), Type.Any(), {
+          description:
+            "符合 xushi Executor schema 的 JSON，例如 { id: 'openclaw', kind: 'openclaw', name: 'OpenClaw', config: { webhook_url: 'http://127.0.0.1:3000/hooks/xushi' }, enabled: true }。",
+        }),
+      }),
+      async execute(_id, params: { executor: JsonValue }) {
+        return textResult(
+          await xushiRequest(config, "/api/v1/executors", {
+            method: "POST",
+            body: JSON.stringify(params.executor),
           }),
         );
       },

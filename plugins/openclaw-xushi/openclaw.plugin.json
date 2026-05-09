@@ -29,6 +29,8 @@
       "xushi_trigger_task",
       "xushi_confirm_run",
       "xushi_callback_run",
+      "xushi_list_executors",
+      "xushi_save_executor",
       "xushi_install_hint"
     ]
   },

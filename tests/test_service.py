@@ -27,6 +27,30 @@ def test_manual_trigger_creates_a_run(tmp_path) -> None:
     assert run.status == "succeeded"
 
 
+def test_reminder_with_missing_executor_records_failure(tmp_path) -> None:
+    service = XushiService(Settings(database_path=tmp_path / "xushi.db", api_token="test-token"))
+    task = service.create_task(
+        TaskCreate(
+            title="喝水",
+            schedule=Schedule(
+                kind="one_shot",
+                run_at=datetime(2026, 5, 9, 12, 0, tzinfo=UTC),
+                timezone="UTC",
+            ),
+            action={
+                "type": "reminder",
+                "executor_id": "missing",
+                "payload": {"message": "该喝水了"},
+            },
+        )
+    )
+
+    run = service.trigger_task(task.id, now=datetime(2026, 5, 9, 12, 0, tzinfo=UTC))
+
+    assert run.status == "failed"
+    assert run.error == "executor not found"
+
+
 def test_create_task_reuses_idempotency_key(tmp_path) -> None:
     service = XushiService(Settings(database_path=tmp_path / "xushi.db", api_token="test-token"))
     request = TaskCreate(

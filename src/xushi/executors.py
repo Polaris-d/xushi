@@ -20,6 +20,10 @@ class ExecutorRegistry:
     def execute(self, action: Action, executor: Executor | None = None) -> dict[str, Any]:
         """执行任务动作并返回同步结果。"""
         if action.type == "reminder":
+            if action.executor_id:
+                if executor is None:
+                    return {"delivered": False, "error": "executor not found"}
+                return self._execute_executor(action, executor)
             title = action.payload.get("title") or action.payload.get("message") or "序时提醒"
             event = self.notifications.notify(
                 title=str(title),
@@ -36,6 +40,10 @@ class ExecutorRegistry:
             }
         if executor is None:
             return {"delivered": False, "error": "executor not found"}
+        return self._execute_executor(action, executor)
+
+    def _execute_executor(self, action: Action, executor: Executor) -> dict[str, Any]:
+        """调用外部执行器。"""
         if executor.kind == "command":
             return self._execute_command(action, executor)
         if executor.kind == "webhook":

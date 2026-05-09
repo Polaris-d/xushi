@@ -24,9 +24,10 @@
 - 支持“至少触发一次”的可靠性语义。
 - 错过触发时默认只补偿最近一次。
 - 每次触发生成可审计运行记录。
-- agent/聊天渠道优先通知，本地通知和 Web 管理台作为兜底。
+- agent/聊天渠道优先通知：提醒任务配置 `executor_id` 时必须通过对应 executor 投递；未配置 executor 的 reminder 仅使用本地系统通知和 Web 管理台记录。
 - 内置 OpenClaw、Hermes、command、webhook executor 概念。
 - OpenClaw/Hermes executor 必须通过 `webhook_url` 或 `command` 真实触发；未配置时返回明确失败。
+- OpenClaw 插件必须提供执行器查看和保存工具，方便 agent 自助配置提醒投递链路。
 - 长任务支持执行器异步回调最终结果，更新运行记录成功或失败状态。
 - 提供 CLI 和本地 Web 管理台。
 - 提供 OpenClaw TypeScript 原生插件。
@@ -82,3 +83,4 @@
 | 2026-05-09 | 新增 | 增加 GitHub 风格 README、MIT License、agent 安装指南和跨平台安装脚本。 |
 | 2026-05-09 | 新增 | 增加换行规范和 tag 触发的 GitHub Release 发布工作流。 |
 | 2026-05-09 | 新增 | 增加 CONTRIBUTING、SECURITY、Issue 模板和 PR 模板。 |
+| 2026-05-09 | 更正 | 修复 reminder 忽略 executor 的投递断点，并明确无 executor 时仅本地通知。 |
