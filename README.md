@@ -1,18 +1,69 @@
-# 序时 xushi
+<p align="center">
+  <strong>序时 xushi</strong>
+</p>
 
-序时是 AI agent 优先的本地化日程管理与调度底座。它用独立 daemon 负责可靠调度、提醒、错过补偿、跟进和运行日志，再通过 OpenClaw/Hermes 等 agent 适配层把自然语言需求变成结构化任务。
+<p align="center">
+  AI agent 优先的本地化日程管理与调度底座。
+</p>
 
-## 当前 v1 骨架
+<p align="center">
+  <a href="https://github.com/Polaris-d/xushi/actions/workflows/build.yml">
+    <img alt="build" src="https://img.shields.io/github/actions/workflow/status/Polaris-d/xushi/build.yml?branch=main">
+  </a>
+  <a href="https://github.com/Polaris-d/xushi/blob/main/LICENSE">
+    <img alt="license" src="https://img.shields.io/badge/license-MIT-blue">
+  </a>
+  <img alt="python" src="https://img.shields.io/badge/python-3.12%2B-3776AB">
+  <img alt="agent first" src="https://img.shields.io/badge/agent--first-local%20scheduler-111827">
+</p>
 
-- Python `xushi-daemon`：FastAPI 本地 HTTP API、SQLite 持久化、任务模型、调度计算、跟进策略。
-- CLI：`xushi init/doctor/create/list/trigger/tick/executor/notifications`。
-- 本地 Web 管理台：访问 daemon 根路径，可查看任务和运行记录。
-- OpenClaw 插件：`plugins/openclaw-xushi`，注册健康检查、创建任务、查询任务、手动触发等工具。
-- 日历能力：内置中国大陆 2026 年节假日和调休数据，按节日名称分组，来源为国务院办公厅通知。
-- 通知记录：提醒触发时生成通知事件，可通过 API、CLI 和 Web 管理台查看。
-- 后台扫描：daemon 启动后每 30 秒自动扫描到期任务和未确认跟进。
-- 调度语义：支持 asap、窗口任务、截止任务、待规划 floating 任务、完成确认锚点和中国工作日顺延。
-- Agent 可靠性：支持 `idempotency_key` 防重复创建，API 成功和错误响应都使用统一 JSON 结构。
+序时是给 OpenClaw、Hermes、Claude Code、Cursor 等 agent 工具使用的本地日程与排期底座。它把提醒、调度、补偿、跟进和运行日志放在本机 daemon 中，让 agent 不需要自己可靠常驻，也能创建结构化、可审计、可确认的日常任务。
+
+## 给人类看的
+
+复制并粘贴以下提示词到你的 LLM Agent，例如 Claude Code、AmpCode、Cursor、OpenClaw：
+
+```text
+Install and configure xushi by following the instructions here:
+https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/docs/guide/installation.md
+```
+
+Agent 会读取安装指南，检查你的系统环境，安装序时，初始化本地 token，并告诉你如何启动 `xushi-daemon`。
+
+## 直接安装
+
+如果你想自己执行安装脚本，可以先阅读脚本内容，再运行：
+
+```powershell
+irm https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.ps1 | iex
+```
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | sh
+```
+
+当前安装脚本会从 GitHub 克隆源码到 `~/.xushi/app`，使用 `uv` 安装依赖并执行 `xushi init`。后续发布 GitHub Release 后，脚本会优先下载预编译二进制。
+
+## 为什么做序时
+
+- Agent 原生：OpenClaw/Hermes 等工具只需要提交结构化 JSON，序时负责可靠调度。
+- 本地优先：默认监听 `127.0.0.1`，使用本地 token，不依赖云端账号。
+- 日常语义：支持固定时间、尽快、时间窗、截止、循环、完成确认、错过补偿和未完成跟进。
+- 中国日历：内置中国大陆 2026 年节假日和调休数据，按节日名称分组。
+- 可审计：每次触发生成 run 记录，支持 callback 更新长任务最终状态。
+- 可分发：提供 wheel、PyInstaller 二进制构建脚本和 OpenClaw 插件骨架。
+
+## 功能概览
+
+| 能力 | 状态 | 说明 |
+| --- | --- | --- |
+| Python daemon | 可用 | FastAPI + SQLite，本地调度与 API |
+| CLI | 可用 | `init`、`doctor`、`create`、`list`、`trigger`、`tick`、`executor`、`notifications` |
+| Web 管理台 | 可用 | 访问 daemon 根路径查看任务、运行记录和通知 |
+| OpenClaw 插件 | 可用 | `plugins/openclaw-xushi`，提供创建、查询、触发、确认和 callback 工具 |
+| 跟进闭环 | 可用 | 未确认任务按策略重复提醒，确认后停止 |
+| 中国工作日 | 可用 | 节假日、调休、工作日顺延、节日名称查询 |
+| 分发构建 | 可用 | wheel、PyInstaller、GitHub Actions |
 
 ## 本地开发
 
@@ -40,8 +91,6 @@ uv run xushi doctor
 - `XUSHI_SCHEDULER_INTERVAL_SECONDS`：默认 `30`
 - `XUSHI_DATABASE_PATH`：默认 `~/.xushi/xushi.db`
 - `XUSHI_API_TOKEN`：覆盖配置文件中的本地 token
-
-`xushi init` 会生成本地 token 并写入配置文件；默认输出只展示脱敏 token。需要把 token 配给 OpenClaw 时，可使用 `--show-token` 显示完整值。
 
 ## 示例任务
 
@@ -73,7 +122,7 @@ uv run xushi doctor
 
 ## 配置 Agent Executor
 
-OpenClaw/Hermes executor 支持两种真实触发方式：
+OpenClaw/Hermes executor 支持 webhook 或命令行真实触发：
 
 ```json
 {
@@ -89,40 +138,10 @@ OpenClaw/Hermes executor 支持两种真实触发方式：
 }
 ```
 
-```json
-{
-  "id": "hermes",
-  "kind": "hermes",
-  "name": "Hermes",
-  "config": {
-    "command": "hermes agent run --stdin",
-    "timeout_seconds": 60
-  },
-  "enabled": true
-}
-```
-
 保存执行器：
 
 ```powershell
 uv run xushi executor .\executor.openclaw.json
-```
-
-未配置 `webhook_url` 或 `command` 时，OpenClaw/Hermes executor 会明确返回失败，不会假装触发成功。
-
-Webhook 请求体格式：
-
-```json
-{
-  "executor": {
-    "id": "openclaw",
-    "kind": "openclaw",
-    "name": "OpenClaw"
-  },
-  "payload": {
-    "prompt": "生成日报"
-  }
-}
 ```
 
 长任务完成后可回调：
@@ -147,20 +166,18 @@ Content-Type: application/json
 uv run pytest
 uv run ruff check .
 node --check plugins/openclaw-xushi/dist/index.js
+uv build --wheel
 ```
 
 ## 分发构建
 
-生成 Python wheel：
-
 ```powershell
 uv build --wheel
-```
-
-生成本机预编译二进制需要 PyInstaller：
-
-```powershell
 uv run --with pyinstaller python scripts/build_binaries.py
 ```
 
 仓库内置 `.github/workflows/build.yml`，会在 Windows、macOS、Linux 上运行测试、lint、wheel 构建和 PyInstaller 二进制构建，并上传构建产物。
+
+## 许可证
+
+本项目使用 [MIT License](LICENSE)。

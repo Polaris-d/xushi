@@ -123,10 +123,14 @@ OpenClaw/Hermes executor 不直接绑定某个外部 SDK。v1 通过配置 `webh
 
 ## 8. 分发设计
 
+- README 使用 GitHub 项目页风格，提供徽章、价值主张、能力表格、快速安装和验证入口。
+- `docs/guide/installation.md` 提供两层安装说明：人类复制给 LLM Agent 的短提示词，以及 agent 可执行的分步安装与验证流程。
+- `scripts/install.ps1` 和 `scripts/install.sh` 默认安装到用户目录 `~/.xushi/app`，已有 Git 仓库时使用 `git pull --ff-only` 更新，随后执行 `uv sync`、`xushi init --show-token` 和 `xushi doctor`。
 - `uv build --wheel` 生成 Python wheel，适合开发者和 Python 用户安装。
 - `scripts/build_binaries.py` 通过 PyInstaller 生成 `xushi` 和 `xushi-daemon` 单文件二进制。
 - PyInstaller 构建使用 `--collect-data xushi`，确保中国节假日 JSON 等包数据被包含在二进制中。
 - `.github/workflows/build.yml` 在 Windows、macOS、Linux 上执行测试、ruff、wheel 构建和二进制构建，并上传产物。
+- 项目根目录提供 MIT License，`pyproject.toml` 声明 `license = "MIT"`。
 
 ## 9. 方案变更记录
 
@@ -142,3 +146,4 @@ OpenClaw/Hermes executor 不直接绑定某个外部 SDK。v1 通过配置 `webh
 | 2026-05-09 | 新增 | 增加 asap 调度、幂等创建和统一 API 错误响应。 |
 | 2026-05-09 | 新增 | 增加 PyInstaller 二进制构建脚本和跨平台 CI 构建工作流。 |
 | 2026-05-09 | 调整 | 中国大陆节假日数据结构改为按节日名称分组，并在日历模块暴露节日名称查询。 |
+| 2026-05-09 | 新增 | 增加 GitHub 风格 README、MIT License、agent 安装指南和跨平台安装脚本。 |
