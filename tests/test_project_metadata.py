@@ -71,3 +71,26 @@ def test_build_workflow_does_not_upload_pyinstaller_spec_files() -> None:
     build_workflow = (ROOT / ".github" / "workflows" / "build.yml").read_text(encoding="utf-8")
 
     assert "*.spec" not in build_workflow
+
+
+def test_github_community_health_files_exist() -> None:
+    assert (ROOT / "CONTRIBUTING.md").exists()
+    assert (ROOT / "SECURITY.md").exists()
+    assert (ROOT / ".github" / "pull_request_template.md").exists()
+    assert (ROOT / ".github" / "ISSUE_TEMPLATE" / "bug_report.yml").exists()
+    assert (ROOT / ".github" / "ISSUE_TEMPLATE" / "feature_request.yml").exists()
+
+
+def test_contributing_documents_required_checks() -> None:
+    contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+
+    assert "uv run pytest" in contributing
+    assert "uv run ruff check ." in contributing
+    assert "node --check plugins/openclaw-xushi/dist/index.js" in contributing
+
+
+def test_security_policy_avoids_private_tokens_in_reports() -> None:
+    security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
+
+    assert "不要公开粘贴 token" in security
+    assert "GitHub Security Advisory" in security

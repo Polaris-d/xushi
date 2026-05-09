@@ -38,6 +38,7 @@
 - 提供 tag 触发的 GitHub Release 工作流，发布 wheel 与跨平台二进制产物。
 - 提供 `.gitattributes` 控制跨平台换行，避免 shell 脚本和 CI 配置在 Windows 开发环境中被破坏。
 - 项目采用 MIT License 开源。
+- 提供贡献指南、安全策略、Issue 模板和 PR 模板，降低外部协作成本。
 - daemon 启动后必须自动扫描到期任务和未确认跟进，不能依赖用户手动执行 `tick`。
 - 支持确认运行记录已完成，确认后停止后续跟进提醒。
 - 支持查看通知投递历史，包含系统通知成功、失败和 fallback 记录。
@@ -80,3 +81,4 @@
 | 2026-05-09 | 调整 | 中国大陆节假日数据由纯日期数组调整为按节日名称分组，并支持查询调休关联节日。 |
 | 2026-05-09 | 新增 | 增加 GitHub 风格 README、MIT License、agent 安装指南和跨平台安装脚本。 |
 | 2026-05-09 | 新增 | 增加换行规范和 tag 触发的 GitHub Release 发布工作流。 |
+| 2026-05-09 | 新增 | 增加 CONTRIBUTING、SECURITY、Issue 模板和 PR 模板。 |

@@ -1,0 +1,38 @@
+name: Bug report
+description: Report a reproducible xushi problem
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What went wrong?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Please include commands, task JSON, and expected vs actual behavior.
+      placeholder: |
+        1. Run ...
+        2. Create task ...
+        3. See ...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, uv version, xushi commit or version.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Remove tokens, account IDs, database contents, and other private data before pasting.
+      render: text
+    validations:
+      required: false

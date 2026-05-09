@@ -133,6 +133,7 @@ OpenClaw/Hermes executor 不直接绑定某个外部 SDK。v1 通过配置 `webh
 - `.github/workflows/release.yml` 在 `v*` tag 上构建并发布 wheel 与跨平台二进制产物。
 - `.gitattributes` 固定 shell、Python、Markdown、YAML、JSON、TOML、TS/JS 为 LF，PowerShell 脚本为 CRLF，避免跨平台安装脚本换行损坏。
 - 项目根目录提供 MIT License，`pyproject.toml` 声明 `license = "MIT"`。
+- 项目根目录提供 `CONTRIBUTING.md` 和 `SECURITY.md`，`.github` 下提供 Issue 模板和 PR 模板，统一外部反馈格式。
 
 ## 9. 方案变更记录
 
@@ -150,3 +151,4 @@ OpenClaw/Hermes executor 不直接绑定某个外部 SDK。v1 通过配置 `webh
 | 2026-05-09 | 调整 | 中国大陆节假日数据结构改为按节日名称分组，并在日历模块暴露节日名称查询。 |
 | 2026-05-09 | 新增 | 增加 GitHub 风格 README、MIT License、agent 安装指南和跨平台安装脚本。 |
 | 2026-05-09 | 新增 | 增加 `.gitattributes` 跨平台换行规范和 tag 发布 Release 工作流。 |
+| 2026-05-09 | 新增 | 增加社区健康文件、Issue 模板和 PR 模板。 |

@@ -178,6 +178,11 @@ uv run --with pyinstaller python scripts/build_binaries.py
 
 仓库内置 `.github/workflows/build.yml`，会在 Windows、macOS、Linux 上运行测试、lint、wheel 构建和 PyInstaller 二进制构建，并上传构建产物。
 
+## 贡献与安全
+
+- 贡献指南：[CONTRIBUTING.md](CONTRIBUTING.md)
+- 安全策略：[SECURITY.md](SECURITY.md)
+
 ## 许可证
 
 本项目使用 [MIT License](LICENSE)。
