@@ -134,7 +134,15 @@ OpenClaw executor 默认通过 OpenClaw 的 `/hooks/agent` 投递提醒，让 ag
     "mode": "hooks_agent",
     "webhook_url": "http://127.0.0.1:18789/hooks/agent",
     "token_env": "OPENCLAW_HOOKS_TOKEN",
+    "name": "Xushi",
+    "agent_id": "reminder-agent",
+    "session_key": "hook:xushi:reminders",
+    "wake_mode": "now",
     "channel": "last",
+    "to": "optional-recipient-id",
+    "model": "openai/gpt-5.4-mini",
+    "thinking": "low",
+    "fallbacks": ["openai/gpt-5.4"],
     "deliver": true,
     "timeout_seconds": 120
   },
@@ -149,6 +157,22 @@ uv run xushi executor .\executor.openclaw.json
 ```
 
 通过 OpenClaw 插件也可以使用 `xushi_save_executor` 保存执行器。
+
+OpenClaw `/hooks/agent` 可选字段均可在 executor config 中配置。序时使用 snake_case，发送给 OpenClaw 时转换为官方 camelCase：
+
+| 序时配置 | OpenClaw 字段 | 说明 |
+| --- | --- | --- |
+| `name` | `name` | hook 显示名称 |
+| `agent_id` | `agentId` | 指定处理提醒的 agent |
+| `session_key` | `sessionKey` | 指定 agent 会话；OpenClaw 默认可能拒绝，需要启用 `hooks.allowRequestSessionKey` |
+| `wake_mode` | `wakeMode` | `now` 或 `next-heartbeat` |
+| `deliver` | `deliver` | 是否把 agent 回复发送到消息 channel |
+| `channel` | `channel` | 例如 `last`、`telegram`、`slack` 或已配置插件 channel |
+| `to` | `to` | 具体接收方 ID |
+| `model` | `model` | 模型覆盖 |
+| `thinking` | `thinking` | 推理强度覆盖 |
+| `fallbacks` | `fallbacks` | 备用模型列表 |
+| `timeout_seconds` | `timeoutSeconds` | agent run 超时时间 |
 
 提醒要真正发给 agent，需要在任务 action 上引用执行器：
 

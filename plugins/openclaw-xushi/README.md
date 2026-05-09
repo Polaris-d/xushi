@@ -63,6 +63,9 @@ OpenClaw config 可覆盖：
     "mode": "hooks_agent",
     "webhook_url": "http://127.0.0.1:18789/hooks/agent",
     "token_env": "OPENCLAW_HOOKS_TOKEN",
+    "name": "Xushi",
+    "agent_id": "reminder-agent",
+    "wake_mode": "now",
     "channel": "last",
     "deliver": true,
     "timeout_seconds": 120
@@ -77,5 +80,7 @@ OpenClaw config 可覆盖：
 2. 创建提醒任务时在 `task.action.executor_id` 中引用该执行器，例如 `"executor_id": "openclaw"`。
 
 没有 `executor_id` 的 `reminder` 只会走本地系统通知，适合桌面环境，不适合无桌面的服务器。
+
+OpenClaw `/hooks/agent` 的可选字段可在 executor config 中配置：`name`、`agent_id`、`session_key`、`wake_mode`、`deliver`、`channel`、`to`、`model`、`fallbacks`、`thinking`、`timeout_seconds`。其中 `session_key` 需要 OpenClaw 允许请求指定 session key。
 
 v1 只实现 OpenClaw `/hooks/agent` 投递。Hermes 和通用 webhook executor 暂时只是预留配置位，`command` executor 已移除。

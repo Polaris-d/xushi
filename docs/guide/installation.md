@@ -123,6 +123,9 @@ Then save an executor that points directly at OpenClaw `/hooks/agent`. This path
     "mode": "hooks_agent",
     "webhook_url": "http://127.0.0.1:18789/hooks/agent",
     "token_env": "OPENCLAW_HOOKS_TOKEN",
+    "name": "Xushi",
+    "agent_id": "reminder-agent",
+    "wake_mode": "now",
     "channel": "last",
     "deliver": true,
     "timeout_seconds": 120
@@ -132,6 +135,8 @@ Then save an executor that points directly at OpenClaw `/hooks/agent`. This path
 ```
 
 Reminder tasks must set `action.executor_id` to `openclaw`.
+
+Optional OpenClaw `/hooks/agent` fields can also be configured in snake_case: `agent_id`, `session_key`, `wake_mode`, `channel`, `to`, `model`, `fallbacks`, `thinking`, and `timeout_seconds`. `session_key` requires OpenClaw to allow request-provided session keys.
 
 ### Notes
 

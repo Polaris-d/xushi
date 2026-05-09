@@ -172,7 +172,7 @@ export default definePluginEntry({
       parameters: Type.Object({
         executor: Type.Record(Type.String(), Type.Any(), {
           description:
-            "符合 xushi Executor schema 的 JSON，例如 { id: 'openclaw', kind: 'openclaw', name: 'OpenClaw', config: { mode: 'hooks_agent', webhook_url: 'http://127.0.0.1:18789/hooks/agent', token_env: 'OPENCLAW_HOOKS_TOKEN', channel: 'last', deliver: true }, enabled: true }。",
+            "符合 xushi Executor schema 的 JSON，例如 { id: 'openclaw', kind: 'openclaw', name: 'OpenClaw', config: { mode: 'hooks_agent', webhook_url: 'http://127.0.0.1:18789/hooks/agent', token_env: 'OPENCLAW_HOOKS_TOKEN', agent_id: 'reminder-agent', channel: 'last', deliver: true, timeout_seconds: 120 }, enabled: true }。",
         }),
       }),
       async execute(_id, params: { executor: JsonValue }) {

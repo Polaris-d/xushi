@@ -28,6 +28,7 @@
 - 内置 OpenClaw、Hermes、webhook executor 概念。
 - OpenClaw executor 默认使用 `mode=hooks_agent` 调用 OpenClaw `/hooks/agent`，让 OpenClaw agent 处理提醒文本并通过 `deliver=true` 投递到聊天渠道。
 - OpenClaw executor 必须支持 `token_env`，避免把 OpenClaw hook token 写入任务或 executor JSON。
+- OpenClaw executor 必须支持 `/hooks/agent` 的可选字段：`name`、`agent_id`、`session_key`、`wake_mode`、`deliver`、`channel`、`to`、`model`、`fallbacks`、`thinking`、`timeout_seconds`。
 - Hermes 和通用 webhook executor v1 仅保留 schema 位置，调用时返回明确未实现状态。
 - v1 暂不提供 command executor，避免跨平台 shell、命令注入和环境差异扩大配置复杂度。
 - OpenClaw 插件必须提供执行器查看和保存工具，方便 agent 自助配置提醒投递链路。
@@ -90,3 +91,4 @@
 | 2026-05-10 | 更正 | 撤回早期 command bridge 方案，避免跨平台和安全边界复杂度。 |
 | 2026-05-10 | 调整 | OpenClaw 默认投递链路从 TaskFlow webhook 调整为 `/hooks/agent`，由 agent 处理并投递到聊天渠道。 |
 | 2026-05-10 | 调整 | 移除 command executor；Hermes 和通用 webhook executor 暂时仅保留预留位置不实现投递。 |
+| 2026-05-10 | 明确 | 完善 OpenClaw `/hooks/agent` 可选字段映射，支持指定 agent、session、channel、recipient、model、fallbacks 和 thinking。 |

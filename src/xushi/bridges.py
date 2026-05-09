@@ -14,22 +14,28 @@ def build_openclaw_hooks_agent_body(
 ) -> dict[str, Any]:
     """将序时 action payload 转换为 OpenClaw `/hooks/agent` 请求体。"""
     message = _openclaw_agent_message(payload)
-    timeout_seconds = int(config.get("agent_timeout_seconds", config.get("timeout_seconds", 120)))
+    timeout_seconds = _config_int(
+        config,
+        "agent_timeout_seconds",
+        "timeout_seconds",
+        "timeoutSeconds",
+        default=120,
+    )
     body: dict[str, Any] = {
         "message": message,
-        "name": str(config.get("name") or "xushi"),
-        "wakeMode": str(config.get("wake_mode") or config.get("wakeMode") or "now"),
-        "deliver": bool(config.get("deliver", True)),
-        "channel": str(config.get("channel") or "last"),
+        "name": str(_config_value(config, "name", default="xushi")),
+        "wakeMode": str(_config_value(config, "wake_mode", "wakeMode", default="now")),
+        "deliver": _config_bool(config, "deliver", default=True),
+        "channel": str(_config_value(config, "channel", default="last")),
         "timeoutSeconds": timeout_seconds,
     }
     optional_fields = {
-        "to": config.get("to"),
-        "agentId": config.get("agent_id", config.get("agentId")),
-        "sessionKey": config.get("session_key", config.get("sessionKey")),
-        "model": config.get("model"),
-        "thinking": config.get("thinking"),
-        "fallbacks": config.get("fallbacks"),
+        "to": _config_value(config, "to"),
+        "agentId": _config_value(config, "agent_id", "agentId"),
+        "sessionKey": _config_value(config, "session_key", "sessionKey"),
+        "model": _config_value(config, "model"),
+        "thinking": _config_value(config, "thinking"),
+        "fallbacks": _config_value(config, "fallbacks"),
     }
     for key, value in optional_fields.items():
         if value is not None:
@@ -66,6 +72,30 @@ def _openclaw_agent_message(payload: dict[str, Any]) -> str:
         parts.append(f"运行ID: {run_id}")
     parts.append("请直接给用户一条可读提醒, 不要输出 JSON。")
     return "\n".join(parts)
+
+
+def _config_value(config: dict[str, Any], *keys: str, default: Any = None) -> Any:
+    """按别名顺序读取配置值。"""
+    for key in keys:
+        if key in config and config[key] is not None:
+            return config[key]
+    return default
+
+
+def _config_bool(config: dict[str, Any], *keys: str, default: bool) -> bool:
+    """按别名顺序读取布尔配置值。"""
+    value = _config_value(config, *keys, default=default)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return parse_bool(value)
+    return bool(value)
+
+
+def _config_int(config: dict[str, Any], *keys: str, default: int) -> int:
+    """按别名顺序读取整数配置值。"""
+    value = _config_value(config, *keys, default=default)
+    return int(value)
 
 
 def parse_bool(value: str) -> bool:
