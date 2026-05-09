@@ -1,7 +1,7 @@
 import { Type } from "@sinclair/typebox";
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 
-const DEFAULT_BASE_URL = "http://127.0.0.1:8766";
+const DEFAULT_BASE_URL = "http://127.0.0.1:18766";
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 

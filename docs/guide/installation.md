@@ -87,13 +87,13 @@ uv run xushi-daemon
 Then verify health:
 
 ```bash
-curl http://127.0.0.1:8766/api/v1/health
+curl http://127.0.0.1:18766/api/v1/health
 ```
 
 On Windows PowerShell:
 
 ```powershell
-Invoke-RestMethod http://127.0.0.1:8766/api/v1/health
+Invoke-RestMethod http://127.0.0.1:18766/api/v1/health
 ```
 
 ### Step 5: Configure agent integration
@@ -101,7 +101,7 @@ Invoke-RestMethod http://127.0.0.1:8766/api/v1/health
 Read the token printed by `xushi init --show-token` or from the local config file. Set it as `XUSHI_API_TOKEN` in the agent environment and use:
 
 ```text
-XUSHI_BASE_URL=http://127.0.0.1:8766
+XUSHI_BASE_URL=http://127.0.0.1:18766
 ```
 
 For OpenClaw, use the plugin in `plugins/openclaw-xushi` and configure `tokenEnv` as `XUSHI_API_TOKEN`.
@@ -161,4 +161,4 @@ If the user wants a specific OpenClaw agent and Feishu session, configure `defau
 
 - Do not commit the generated local config file.
 - Do not paste the full local token into public issues, logs, or documentation.
-- If port `8766` is occupied, set `XUSHI_PORT` before running `xushi-daemon`.
+- If port `18766` is occupied, set `XUSHI_PORT` before running `xushi-daemon`.

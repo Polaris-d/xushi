@@ -9,7 +9,7 @@
     "properties": {
       "baseUrl": {
         "type": "string",
-        "description": "xushi daemon 本地 HTTP 地址，默认 http://127.0.0.1:8766"
+        "description": "xushi daemon 本地 HTTP 地址，默认 http://127.0.0.1:18766"
       },
       "tokenEnv": {
         "type": "string",

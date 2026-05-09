@@ -13,7 +13,7 @@
 ## 3. v1 核心需求
 
 - 独立 `xushi-daemon` 常驻进程负责调度，不依赖 agent 自身常驻。
-- 默认只监听 `127.0.0.1`，通过本地 token 鉴权。
+- 默认只监听 `127.0.0.1:18766`，通过本地 token 鉴权。
 - 支持结构化任务输入，由 agent 将自然语言转换为序时 schema。
 - 支持固定时间、循环任务、时间窗口、截止时间、持续时长、过期策略、完成确认和未完成跟进。
 - 支持 `idempotency_key`，保障 agent 重试创建任务时不会重复生成任务。
@@ -96,3 +96,4 @@
 | 2026-05-10 | 明确 | 完善 OpenClaw `/hooks/agent` 可选字段映射，支持指定 agent、session、channel、recipient、model、fallbacks 和 thinking。 |
 | 2026-05-10 | 调整 | OpenClaw HTTPS 自签名证书改为显式 `insecure_tls` 配置，默认保持 HTTP 示例和 TLS 校验。 |
 | 2026-05-10 | 调整 | executor 配置从 SQLite/API 保存调整为 `config.json` 管理，OpenClaw 插件仅保留查看工具。 |
+| 2026-05-10 | 调整 | 默认本地 API 端口从 `8766` 调整为更高位且保留原记忆点的 `18766`。 |

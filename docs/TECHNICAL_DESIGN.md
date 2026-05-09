@@ -49,7 +49,7 @@ flowchart LR
 
 ## 4. API 设计
 
-默认绑定 `127.0.0.1`，通过 `Authorization: Bearer <token>` 鉴权。
+默认绑定 `127.0.0.1:18766`，通过 `Authorization: Bearer <token>` 鉴权。
 
 - `GET /api/v1/health`
 - `POST /api/v1/tasks`
@@ -160,3 +160,4 @@ OpenClaw executor 是 v1 唯一实现的 agent 回传路径。`mode=hooks_agent`
 | 2026-05-10 | 明确 | 完善 OpenClaw `/hooks/agent` 可选字段映射，支持 snake_case 与 camelCase 配置别名。 |
 | 2026-05-10 | 调整 | OpenClaw HTTPS 自签名证书改为显式 `insecure_tls` 配置，默认保持 TLS 证书校验。 |
 | 2026-05-10 | 调整 | executor 配置从 SQLite/API 写入调整为 `config.json` 管理，API 和 OpenClaw 插件仅保留只读查看能力。 |
+| 2026-05-10 | 调整 | 默认 daemon 端口从 `8766` 调整为 `18766`，避开低位常见开发端口并保留旧端口记忆点。 |

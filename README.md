@@ -76,8 +76,8 @@ uv run xushi-daemon
 
 访问：
 
-- Web 管理台：`http://127.0.0.1:8766/`
-- 健康检查：`http://127.0.0.1:8766/api/v1/health`
+- Web 管理台：`http://127.0.0.1:18766/`
+- 健康检查：`http://127.0.0.1:18766/api/v1/health`
 
 诊断本地配置和端口：
 
@@ -88,7 +88,7 @@ uv run xushi doctor
 可选环境变量：
 
 - `XUSHI_CONFIG_PATH`：默认 `~/.xushi/config.json`
-- `XUSHI_PORT`：默认 `8766`
+- `XUSHI_PORT`：默认 `18766`
 - `XUSHI_SCHEDULER_INTERVAL_SECONDS`：默认 `30`
 - `XUSHI_DATABASE_PATH`：默认 `~/.xushi/xushi.db`
 - `XUSHI_API_TOKEN`：覆盖配置文件中的本地 token

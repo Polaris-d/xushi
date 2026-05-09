@@ -10,7 +10,7 @@ from xushi.config import Settings
 def test_default_port_avoids_blocked_windows_development_port() -> None:
     settings = Settings()
 
-    assert settings.port == 8766
+    assert settings.port == 18766
 
 
 def test_write_initial_config_creates_local_token_and_paths(tmp_path, monkeypatch) -> None:
@@ -26,7 +26,7 @@ def test_write_initial_config_creates_local_token_and_paths(tmp_path, monkeypatc
     assert len(saved["api_token"]) >= 32
     assert saved["database_path"] == str(state_dir / "xushi.db")
     assert saved["host"] == "127.0.0.1"
-    assert saved["port"] == 8766
+    assert saved["port"] == 18766
     assert saved["scheduler_interval_seconds"] == 30
     assert saved["executors"][0]["id"] == "openclaw"
     assert saved["executors"][0]["config"]["mode"] == "hooks_agent"

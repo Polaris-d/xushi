@@ -26,7 +26,7 @@ xushi-daemon
 
 默认读取：
 
-- `XUSHI_BASE_URL`：默认 `http://127.0.0.1:8766`
+- `XUSHI_BASE_URL`：默认 `http://127.0.0.1:18766`
 - `XUSHI_API_TOKEN`：本地 API token
 
 OpenClaw config 可覆盖：
@@ -38,7 +38,7 @@ OpenClaw config 可覆盖：
       "xushi": {
         "enabled": true,
         "config": {
-          "baseUrl": "http://127.0.0.1:8766",
+          "baseUrl": "http://127.0.0.1:18766",
           "tokenEnv": "XUSHI_API_TOKEN"
         }
       }
