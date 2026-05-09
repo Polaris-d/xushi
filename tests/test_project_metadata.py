@@ -45,3 +45,29 @@ def test_install_scripts_use_safe_defaults() -> None:
     assert "git pull --ff-only" in sh
     assert "uv sync" in ps1
     assert "uv sync" in sh
+
+
+def test_line_endings_are_controlled_for_cross_platform_scripts() -> None:
+    attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8")
+
+    assert "*.sh text eol=lf" in attributes
+    assert "*.py text eol=lf" in attributes
+    assert "*.yml text eol=lf" in attributes
+    assert "*.md text eol=lf" in attributes
+
+
+def test_release_workflow_publishes_tagged_artifacts() -> None:
+    release_workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "tags: [\"v*\"]" in release_workflow
+    assert "softprops/action-gh-release" in release_workflow
+    assert "actions/upload-artifact" in release_workflow
+    assert "actions/download-artifact" in release_workflow
+
+
+def test_build_workflow_does_not_upload_pyinstaller_spec_files() -> None:
+    build_workflow = (ROOT / ".github" / "workflows" / "build.yml").read_text(encoding="utf-8")
+
+    assert "*.spec" not in build_workflow

@@ -129,7 +129,9 @@ OpenClaw/Hermes executor 不直接绑定某个外部 SDK。v1 通过配置 `webh
 - `uv build --wheel` 生成 Python wheel，适合开发者和 Python 用户安装。
 - `scripts/build_binaries.py` 通过 PyInstaller 生成 `xushi` 和 `xushi-daemon` 单文件二进制。
 - PyInstaller 构建使用 `--collect-data xushi`，确保中国节假日 JSON 等包数据被包含在二进制中。
-- `.github/workflows/build.yml` 在 Windows、macOS、Linux 上执行测试、ruff、wheel 构建和二进制构建，并上传产物。
+- `.github/workflows/build.yml` 在 Windows、macOS、Linux 上执行测试、ruff、wheel 构建和二进制构建，并上传产物，不上传 PyInstaller 临时 `.spec` 文件。
+- `.github/workflows/release.yml` 在 `v*` tag 上构建并发布 wheel 与跨平台二进制产物。
+- `.gitattributes` 固定 shell、Python、Markdown、YAML、JSON、TOML、TS/JS 为 LF，PowerShell 脚本为 CRLF，避免跨平台安装脚本换行损坏。
 - 项目根目录提供 MIT License，`pyproject.toml` 声明 `license = "MIT"`。
 
 ## 9. 方案变更记录
@@ -147,3 +149,4 @@ OpenClaw/Hermes executor 不直接绑定某个外部 SDK。v1 通过配置 `webh
 | 2026-05-09 | 新增 | 增加 PyInstaller 二进制构建脚本和跨平台 CI 构建工作流。 |
 | 2026-05-09 | 调整 | 中国大陆节假日数据结构改为按节日名称分组，并在日历模块暴露节日名称查询。 |
 | 2026-05-09 | 新增 | 增加 GitHub 风格 README、MIT License、agent 安装指南和跨平台安装脚本。 |
+| 2026-05-09 | 新增 | 增加 `.gitattributes` 跨平台换行规范和 tag 发布 Release 工作流。 |

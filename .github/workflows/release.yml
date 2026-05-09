@@ -1,15 +1,16 @@
-name: build
+name: release
 
 on:
   push:
-    branches: ["main"]
     tags: ["v*"]
-  pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  python:
-    name: python-${{ matrix.os }}
+  build:
+    name: build-${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -34,12 +35,15 @@ jobs:
             dist/**
             build/dist/**
 
-  openclaw-plugin:
-    name: openclaw-plugin
+  release:
+    name: publish-release
+    needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/download-artifact@v4
         with:
-          node-version: "20"
-      - run: node --check plugins/openclaw-xushi/dist/index.js
+          path: release-assets
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-assets/**/*

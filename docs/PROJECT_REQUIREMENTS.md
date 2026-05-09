@@ -35,6 +35,8 @@
 - 提供面向人类复制给 LLM Agent 的安装提示词和 agent 可读安装指南。
 - 提供 Windows PowerShell 与 macOS/Linux shell 安装脚本，默认安装到用户本地目录。
 - 提供 wheel 和跨平台预编译二进制构建配置，降低非 Python 用户安装门槛。
+- 提供 tag 触发的 GitHub Release 工作流，发布 wheel 与跨平台二进制产物。
+- 提供 `.gitattributes` 控制跨平台换行，避免 shell 脚本和 CI 配置在 Windows 开发环境中被破坏。
 - 项目采用 MIT License 开源。
 - daemon 启动后必须自动扫描到期任务和未确认跟进，不能依赖用户手动执行 `tick`。
 - 支持确认运行记录已完成，确认后停止后续跟进提醒。
@@ -77,3 +79,4 @@
 | 2026-05-09 | 新增 | 增加 PyInstaller 二进制构建脚本和跨平台 GitHub Actions 构建工作流。 |
 | 2026-05-09 | 调整 | 中国大陆节假日数据由纯日期数组调整为按节日名称分组，并支持查询调休关联节日。 |
 | 2026-05-09 | 新增 | 增加 GitHub 风格 README、MIT License、agent 安装指南和跨平台安装脚本。 |
+| 2026-05-09 | 新增 | 增加换行规范和 tag 触发的 GitHub Release 发布工作流。 |
