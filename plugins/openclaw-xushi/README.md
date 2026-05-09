@@ -52,9 +52,30 @@ OpenClaw config 可覆盖：
 
 ## 提醒投递到 Agent
 
-序时 daemon 不能自动调用 OpenClaw 插件本身。要让提醒进入 OpenClaw/飞书等 agent 渠道，必须满足两点：
+序时 daemon 不能自动调用 OpenClaw 插件本身。要让提醒进入 OpenClaw/飞书等 agent 渠道，推荐配置 OpenClaw hooks agent executor：
 
-1. 使用 `xushi_save_executor` 或 CLI 注册 `openclaw` 执行器，并配置 `webhook_url` 或 `command`。
+```json
+{
+  "id": "openclaw",
+  "kind": "openclaw",
+  "name": "OpenClaw",
+  "config": {
+    "mode": "hooks_agent",
+    "webhook_url": "http://127.0.0.1:18789/hooks/agent",
+    "token_env": "OPENCLAW_HOOKS_TOKEN",
+    "channel": "last",
+    "deliver": true,
+    "timeout_seconds": 120
+  },
+  "enabled": true
+}
+```
+
+必须满足两点：
+
+1. OpenClaw Gateway 已启用 hooks，并且运行 `xushi-daemon` 的环境里有 `OPENCLAW_HOOKS_TOKEN`。
 2. 创建提醒任务时在 `task.action.executor_id` 中引用该执行器，例如 `"executor_id": "openclaw"`。
 
 没有 `executor_id` 的 `reminder` 只会走本地系统通知，适合桌面环境，不适合无桌面的服务器。
+
+v1 只实现 OpenClaw `/hooks/agent` 投递。Hermes 和通用 webhook executor 暂时只是预留配置位，`command` executor 已移除。

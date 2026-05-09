@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from xushi.models import Schedule, TaskCreate
+from xushi.models import Executor, Schedule, TaskCreate
 
 
 def test_schedule_requires_timezone() -> None:
@@ -31,3 +31,13 @@ def test_task_create_accepts_agent_action_payload() -> None:
 
     assert task.action.type == "agent"
     assert task.action.executor_id == "openclaw"
+
+
+def test_executor_rejects_command_kind() -> None:
+    with pytest.raises(ValidationError):
+        Executor(
+            id="legacy_command",
+            kind="command",
+            name="Legacy Command",
+            config={"command": "echo hi"},
+        )

@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from xushi.bridges import DEFAULT_OPENCLAW_HOOKS_AGENT_URL
 from xushi.config import Settings
 from xushi.executors import ExecutorRegistry
 from xushi.models import (
@@ -240,7 +241,19 @@ class XushiService:
 
     def _ensure_builtin_executors(self) -> None:
         for executor in (
-            Executor(id="openclaw", kind="openclaw", name="OpenClaw", config={"mode": "template"}),
+            Executor(
+                id="openclaw",
+                kind="openclaw",
+                name="OpenClaw",
+                config={
+                    "mode": "hooks_agent",
+                    "webhook_url": DEFAULT_OPENCLAW_HOOKS_AGENT_URL,
+                    "token_env": "OPENCLAW_HOOKS_TOKEN",
+                    "channel": "last",
+                    "deliver": True,
+                    "timeout_seconds": 120,
+                },
+            ),
             Executor(id="hermes", kind="hermes", name="Hermes", config={"mode": "template"}),
         ):
             if self.store.get_executor(executor.id) is None:

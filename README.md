@@ -49,7 +49,7 @@ curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scr
 - Agent 原生：OpenClaw/Hermes 等工具只需要提交结构化 JSON，序时负责可靠调度。
 - 本地优先：默认监听 `127.0.0.1`，使用本地 token，不依赖云端账号。
 - 日常语义：支持固定时间、尽快、时间窗、截止、循环、完成确认、错过补偿和未完成跟进。
-- Agent 投递：提醒任务可通过 `executor_id` 投递到 OpenClaw/Hermes/webhook/command；未配置 executor 时只走本地系统通知。
+- Agent 投递：提醒任务可通过 `executor_id` 投递到 OpenClaw `/hooks/agent`；未配置 executor 时只走本地系统通知。
 - 中国日历：内置中国大陆 2026 年节假日和调休数据，按节日名称分组。
 - 可审计：每次触发生成 run 记录，支持 callback 更新长任务最终状态。
 - 可分发：提供 wheel、PyInstaller 二进制构建脚本和 OpenClaw 插件骨架。
@@ -123,7 +123,7 @@ uv run xushi doctor
 
 ## 配置 Agent Executor
 
-OpenClaw/Hermes executor 支持 webhook 或命令行真实触发：
+OpenClaw executor 默认通过 OpenClaw 的 `/hooks/agent` 投递提醒，让 agent 处理消息并通过已配置的聊天 channel 送达用户。请先在 OpenClaw 中启用 hooks，并配置独立 hook token。
 
 ```json
 {
@@ -131,9 +131,12 @@ OpenClaw/Hermes executor 支持 webhook 或命令行真实触发：
   "kind": "openclaw",
   "name": "OpenClaw",
   "config": {
-    "webhook_url": "http://127.0.0.1:3000/hooks/xushi",
-    "token": "local-secret",
-    "timeout_seconds": 30
+    "mode": "hooks_agent",
+    "webhook_url": "http://127.0.0.1:18789/hooks/agent",
+    "token_env": "OPENCLAW_HOOKS_TOKEN",
+    "channel": "last",
+    "deliver": true,
+    "timeout_seconds": 120
   },
   "enabled": true
 }
@@ -161,6 +164,8 @@ uv run xushi executor .\executor.openclaw.json
 ```
 
 如果 `reminder` 没有 `executor_id`，序时只会尝试本地桌面通知；在无桌面的 Linux 服务器上通常只能留下 fallback 记录。
+
+`webhook` 和 `hermes` executor 暂时只保留 schema 位置，v1 不执行投递。`command` executor 已移除，避免跨平台和安全边界变复杂。
 
 长任务完成后可回调：
 

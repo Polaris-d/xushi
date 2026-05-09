@@ -45,7 +45,7 @@ flowchart LR
 - `xushi.api`：本地 HTTP API 和 Web 管理台。
 - `xushi.cli`：命令行入口。
 - `plugins/openclaw-xushi`：OpenClaw 原生插件。
-- `xushi.executors`：command/webhook/OpenClaw/Hermes 执行器调用。
+- `xushi.executors`：OpenClaw 执行器调用；Hermes 和通用 webhook executor 暂时仅保留预留位置。
 
 ## 4. API 设计
 
@@ -90,7 +90,7 @@ SQLite 连接按操作短连接打开并立即关闭，避免 Windows 下 daemon
 
 配置优先级为环境变量高于配置文件高于默认值。默认配置文件位于状态目录下的 `config.json`，`xushi init` 可生成本地 token、SQLite 路径、监听地址、端口和后台扫描间隔；`xushi doctor` 用于检查配置文件、数据库目录和端口占用，帮助 agent 插件给出可执行的错误提示。
 
-OpenClaw/Hermes executor 不直接绑定某个外部 SDK。v1 通过配置 `webhook_url` 或 `command` 触发真实 agent；未配置时返回失败，避免模板假成功。Webhook 请求体包含 executor 摘要和 action payload，支持 Bearer token。`reminder` action 在配置 `executor_id` 时会走对应 executor；没有 `executor_id` 时才走本地系统通知。
+OpenClaw executor 是 v1 唯一实现的 agent 回传路径。`mode=hooks_agent` 时，序时将 `action.payload` 转换为 OpenClaw `/hooks/agent` 请求体，字段包括 `message`、`name`、`wakeMode`、`deliver`、`channel` 和 `timeoutSeconds`。token 优先从 executor 的 `token` 读取，其次从 `token_env` 或默认环境变量 `OPENCLAW_HOOKS_TOKEN` / `OPENCLAW_WEBHOOK_TOKEN` 读取。Hermes 和通用 webhook executor 暂时仅保留 schema 位置，调用时返回 `reserved but not implemented`，不进行网络投递。v1 不提供 command executor，避免跨平台 shell、命令注入和环境差异扩大配置复杂度。`reminder` action 在配置 `executor_id` 时会走对应 executor；没有 `executor_id` 时才走本地系统通知。
 
 长任务可在启动后异步回调 `POST /api/v1/runs/{id}/callback`，将运行记录更新为 `succeeded` 或 `failed`，并合并最终结果。
 
@@ -119,7 +119,7 @@ OpenClaw/Hermes executor 不直接绑定某个外部 SDK。v1 通过配置 `webh
 - `openclaw.plugin.json` 声明插件 ID、配置 schema、工具契约。
 - `package.json#openclaw` 声明 TS 源入口和 JS 运行时入口。
 - 注册工具：`xushi_health`、`xushi_create_task`、`xushi_list_tasks`、`xushi_get_task`、`xushi_trigger_task`、`xushi_confirm_run`、`xushi_callback_run`、`xushi_install_hint`。
-- 注册执行器工具：`xushi_list_executors`、`xushi_save_executor`，用于配置 OpenClaw/Hermes/webhook/command 投递链路。
+- 注册执行器工具：`xushi_list_executors`、`xushi_save_executor`，用于配置 OpenClaw `/hooks/agent` 投递链路并查看预留 executor。
 - 插件读取 `XUSHI_BASE_URL` 和 `XUSHI_API_TOKEN`，默认连接本机 daemon。
 
 ## 8. 分发设计
@@ -143,7 +143,7 @@ OpenClaw/Hermes executor 不直接绑定某个外部 SDK。v1 通过配置 `webh
 | 2026-05-09 | 新增 | 创建 Python daemon + TypeScript OpenClaw 插件的 v1 技术方案。 |
 | 2026-05-09 | 明确 | 增加后台调度循环、运行记录确认接口、跟进记录关联和 OpenClaw 确认工具。 |
 | 2026-05-09 | 明确 | 增加数据文件驱动的中国大陆 2026 年节假日与调休日历。 |
-| 2026-05-09 | 明确 | OpenClaw/Hermes executor 支持 webhook/command 真实调用和失败回执。 |
+| 2026-05-09 | 明确 | OpenClaw executor 从模板占位升级为真实投递探索，后续收敛到 `/hooks/agent`。 |
 | 2026-05-09 | 新增 | 增加长任务 callback API 和 OpenClaw callback 工具。 |
 | 2026-05-09 | 新增 | 增加配置文件初始化、环境变量覆盖和 CLI doctor 诊断设计。 |
 | 2026-05-09 | 明确 | 实现窗口、截止、待规划、完成锚点和工作日顺延调度规则。 |
@@ -154,3 +154,6 @@ OpenClaw/Hermes executor 不直接绑定某个外部 SDK。v1 通过配置 `webh
 | 2026-05-09 | 新增 | 增加 `.gitattributes` 跨平台换行规范和 tag 发布 Release 工作流。 |
 | 2026-05-09 | 新增 | 增加社区健康文件、Issue 模板和 PR 模板。 |
 | 2026-05-09 | 更正 | 修复 reminder action 忽略 executor 的路由问题，并补充 OpenClaw executor 配置工具。 |
+| 2026-05-10 | 更正 | 撤回早期 command bridge 方案，避免跨平台和安全边界复杂度。 |
+| 2026-05-10 | 调整 | OpenClaw 默认投递链路从 TaskFlow webhook 调整为 `/hooks/agent`，并新增 `hooks_agent` 载荷适配。 |
+| 2026-05-10 | 调整 | 移除 command executor；Hermes 和通用 webhook executor 暂时仅返回预留未实现状态。 |

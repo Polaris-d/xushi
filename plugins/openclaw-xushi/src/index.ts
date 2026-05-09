@@ -158,7 +158,7 @@ export default definePluginEntry({
 
     api.registerTool({
       name: "xushi_list_executors",
-      description: "列出本机 xushi 执行器配置，用于确认 OpenClaw/Hermes/webhook/command 投递链路是否可用。",
+      description: "列出本机 xushi 执行器配置，用于确认 OpenClaw /hooks/agent 投递链路是否可用。",
       parameters: Type.Object({}),
       async execute() {
         return textResult(await xushiRequest(config, "/api/v1/executors"));
@@ -168,11 +168,11 @@ export default definePluginEntry({
     api.registerTool({
       name: "xushi_save_executor",
       description:
-        "创建或更新 xushi 执行器。OpenClaw/Hermes executor 必须配置 webhook_url 或 command，否则 daemon 无法主动把提醒发给 agent。",
+        "创建或更新 xushi 执行器。v1 仅实现 OpenClaw /hooks/agent；Hermes/webhook 暂时只是预留 executor，command 已移除。",
       parameters: Type.Object({
         executor: Type.Record(Type.String(), Type.Any(), {
           description:
-            "符合 xushi Executor schema 的 JSON，例如 { id: 'openclaw', kind: 'openclaw', name: 'OpenClaw', config: { webhook_url: 'http://127.0.0.1:3000/hooks/xushi' }, enabled: true }。",
+            "符合 xushi Executor schema 的 JSON，例如 { id: 'openclaw', kind: 'openclaw', name: 'OpenClaw', config: { mode: 'hooks_agent', webhook_url: 'http://127.0.0.1:18789/hooks/agent', token_env: 'OPENCLAW_HOOKS_TOKEN', channel: 'last', deliver: true }, enabled: true }。",
         }),
       }),
       async execute(_id, params: { executor: JsonValue }) {

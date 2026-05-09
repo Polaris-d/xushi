@@ -45,27 +45,21 @@ def _start_server() -> tuple[HTTPServer, str]:
     return server, f"http://{host}:{port}/hooks/agent"
 
 
-def test_webhook_executor_posts_action_payload() -> None:
-    server, url = _start_server()
-    try:
-        executor = Executor(
-            id="webhook_agent",
-            kind="webhook",
-            name="Webhook Agent",
-            config={"webhook_url": url, "token": "secret"},
-        )
-        action = Action(type="agent", executor_id="webhook_agent", payload={"prompt": "生成日报"})
+def test_webhook_executor_is_reserved_not_implemented() -> None:
+    executor = Executor(
+        id="webhook_agent",
+        kind="webhook",
+        name="Webhook Agent",
+        config={"webhook_url": "http://127.0.0.1:9/hooks"},
+    )
+    action = Action(type="agent", executor_id="webhook_agent", payload={"prompt": "生成日报"})
 
-        result = ExecutorRegistry().execute(action, executor)
-    finally:
-        server.shutdown()
-        server.server_close()
+    result = ExecutorRegistry().execute(action, executor)
 
-    assert result["delivered"] is True
-    assert result["status_code"] == 200
-    assert result["response_json"] == {"accepted": True, "run_id": "remote_1"}
-    assert RecordingHandler.received[0]["authorization"] == "Bearer secret"
-    assert RecordingHandler.received[0]["body"]["payload"] == {"prompt": "生成日报"}
+    assert result["delivered"] is False
+    assert result["executor"] == "webhook_agent"
+    assert result["kind"] == "webhook"
+    assert result["error"] == "webhook executor reserved but not implemented"
 
 
 def test_reminder_with_executor_posts_to_agent_webhook() -> None:
@@ -75,12 +69,12 @@ def test_reminder_with_executor_posts_to_agent_webhook() -> None:
             id="openclaw",
             kind="openclaw",
             name="OpenClaw",
-            config={"webhook_url": url, "token": "secret"},
+            config={"webhook_url": url, "token": "secret", "channel": "feishu"},
         )
         action = Action(
             type="reminder",
             executor_id="openclaw",
-            payload={"title": "喝水", "message": "该喝水了"},
+            payload={"title": "喝水", "message": "该喝水了", "task_id": "task_1"},
         )
 
         result = ExecutorRegistry().execute(action, executor)
@@ -90,11 +84,17 @@ def test_reminder_with_executor_posts_to_agent_webhook() -> None:
 
     assert result["delivered"] is True
     assert result["executor"] == "openclaw"
+    assert result["mode"] == "hooks_agent"
     assert RecordingHandler.received[0]["authorization"] == "Bearer secret"
-    assert RecordingHandler.received[0]["body"]["payload"] == {
-        "title": "喝水",
-        "message": "该喝水了",
-    }
+    body = RecordingHandler.received[0]["body"]
+    assert body["name"] == "xushi"
+    assert body["deliver"] is True
+    assert body["channel"] == "feishu"
+    assert body["wakeMode"] == "now"
+    assert body["timeoutSeconds"] == 120
+    assert "喝水" in body["message"]
+    assert "该喝水了" in body["message"]
+    assert "task_1" in body["message"]
 
 
 def test_reminder_with_missing_executor_fails_instead_of_local_fallback() -> None:
@@ -110,14 +110,15 @@ def test_reminder_with_missing_executor_fails_instead_of_local_fallback() -> Non
     assert result["error"] == "executor not found"
 
 
-def test_openclaw_executor_delegates_to_webhook_when_configured() -> None:
+def test_openclaw_executor_uses_token_env_for_hooks_agent(monkeypatch) -> None:
     server, url = _start_server()
+    monkeypatch.setenv("OPENCLAW_HOOKS_TOKEN", "secret-from-env")
     try:
         executor = Executor(
             id="openclaw",
             kind="openclaw",
             name="OpenClaw",
-            config={"webhook_url": url},
+            config={"webhook_url": url, "token_env": "OPENCLAW_HOOKS_TOKEN"},
         )
         action = Action(type="agent", executor_id="openclaw", payload={"prompt": "提醒我喝水"})
 
@@ -127,14 +128,28 @@ def test_openclaw_executor_delegates_to_webhook_when_configured() -> None:
         server.server_close()
 
     assert result["delivered"] is True
-    assert RecordingHandler.received[0]["body"]["executor"]["kind"] == "openclaw"
+    assert RecordingHandler.received[0]["authorization"] == "Bearer secret-from-env"
+    assert RecordingHandler.received[0]["body"]["message"] == "提醒我喝水"
 
 
-def test_hermes_executor_without_command_or_webhook_fails_explicitly() -> None:
+def test_openclaw_executor_rejects_non_hooks_agent_mode() -> None:
+    executor = Executor(id="openclaw", kind="openclaw", name="OpenClaw", config={"mode": "command"})
+    action = Action(type="agent", executor_id="openclaw", payload={"prompt": "整理日程"})
+
+    result = ExecutorRegistry().execute(action, executor)
+
+    assert result["delivered"] is False
+    assert result["mode"] == "command"
+    assert result["error"] == "unsupported openclaw executor mode: command"
+
+
+def test_hermes_executor_is_reserved_not_implemented() -> None:
     executor = Executor(id="hermes", kind="hermes", name="Hermes", config={"mode": "template"})
     action = Action(type="agent", executor_id="hermes", payload={"prompt": "整理日程"})
 
     result = ExecutorRegistry().execute(action, executor)
 
     assert result["delivered"] is False
-    assert "missing command or webhook_url" in result["error"]
+    assert result["executor"] == "hermes"
+    assert result["kind"] == "hermes"
+    assert result["error"] == "hermes executor reserved but not implemented"

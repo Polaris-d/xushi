@@ -187,7 +187,7 @@ class Executor(BaseModel):
     """外部 agent 或命令执行器。"""
 
     id: str
-    kind: Literal["openclaw", "hermes", "command", "webhook"]
+    kind: Literal["openclaw", "hermes", "webhook"]
     name: str
     config: dict[str, Any] = Field(default_factory=dict)
     enabled: bool = True

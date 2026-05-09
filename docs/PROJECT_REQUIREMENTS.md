@@ -25,8 +25,11 @@
 - 错过触发时默认只补偿最近一次。
 - 每次触发生成可审计运行记录。
 - agent/聊天渠道优先通知：提醒任务配置 `executor_id` 时必须通过对应 executor 投递；未配置 executor 的 reminder 仅使用本地系统通知和 Web 管理台记录。
-- 内置 OpenClaw、Hermes、command、webhook executor 概念。
-- OpenClaw/Hermes executor 必须通过 `webhook_url` 或 `command` 真实触发；未配置时返回明确失败。
+- 内置 OpenClaw、Hermes、webhook executor 概念。
+- OpenClaw executor 默认使用 `mode=hooks_agent` 调用 OpenClaw `/hooks/agent`，让 OpenClaw agent 处理提醒文本并通过 `deliver=true` 投递到聊天渠道。
+- OpenClaw executor 必须支持 `token_env`，避免把 OpenClaw hook token 写入任务或 executor JSON。
+- Hermes 和通用 webhook executor v1 仅保留 schema 位置，调用时返回明确未实现状态。
+- v1 暂不提供 command executor，避免跨平台 shell、命令注入和环境差异扩大配置复杂度。
 - OpenClaw 插件必须提供执行器查看和保存工具，方便 agent 自助配置提醒投递链路。
 - 长任务支持执行器异步回调最终结果，更新运行记录成功或失败状态。
 - 提供 CLI 和本地 Web 管理台。
@@ -73,7 +76,7 @@
 | 2026-05-09 | 明确 | daemon 需要后台自动扫描任务，运行记录需要支持确认完成和未确认跟进闭环。 |
 | 2026-05-09 | 新增 | 增加通知投递历史，支持 CLI、API 和 Web 管理台查看。 |
 | 2026-05-09 | 明确 | 中国大陆 2026 年节假日和调休数据采用国务院办公厅通知作为来源。 |
-| 2026-05-09 | 明确 | OpenClaw/Hermes executor 从模板占位升级为 command/webhook 真实调用。 |
+| 2026-05-09 | 明确 | OpenClaw executor 从模板占位升级为真实投递探索，后续收敛到 `/hooks/agent`。 |
 | 2026-05-09 | 新增 | 增加长任务回调能力，支持 agent 异步提交最终结果。 |
 | 2026-05-09 | 新增 | 增加本地配置初始化和诊断命令，改善 OpenClaw 用户安装接入体验。 |
 | 2026-05-09 | 明确 | 补充窗口、截止、待规划、完成锚点和工作日顺延的 v1 调度语义。 |
@@ -84,3 +87,6 @@
 | 2026-05-09 | 新增 | 增加换行规范和 tag 触发的 GitHub Release 发布工作流。 |
 | 2026-05-09 | 新增 | 增加 CONTRIBUTING、SECURITY、Issue 模板和 PR 模板。 |
 | 2026-05-09 | 更正 | 修复 reminder 忽略 executor 的投递断点，并明确无 executor 时仅本地通知。 |
+| 2026-05-10 | 更正 | 撤回早期 command bridge 方案，避免跨平台和安全边界复杂度。 |
+| 2026-05-10 | 调整 | OpenClaw 默认投递链路从 TaskFlow webhook 调整为 `/hooks/agent`，由 agent 处理并投递到聊天渠道。 |
+| 2026-05-10 | 调整 | 移除 command executor；Hermes 和通用 webhook executor 暂时仅保留预留位置不实现投递。 |

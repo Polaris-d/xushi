@@ -47,6 +47,17 @@ def test_install_scripts_use_safe_defaults() -> None:
     assert "uv sync" in sh
 
 
+def test_openclaw_hooks_agent_uses_environment_configuration() -> None:
+    bridge = (ROOT / "src" / "xushi" / "bridges.py").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "OPENCLAW_HOOKS_TOKEN" in bridge
+    assert "/hooks/agent" in bridge
+    assert "xushi-notify-" not in bridge
+    assert "build_openclaw_hooks_agent_body" in bridge
+    assert "mode\": \"hooks_agent\"" in readme
+
+
 def test_line_endings_are_controlled_for_cross_platform_scripts() -> None:
     attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8")
 
