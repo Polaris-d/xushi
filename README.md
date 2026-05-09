@@ -257,11 +257,23 @@ uv build --wheel
 ## 分发构建
 
 ```powershell
-uv build --wheel
+uv build
 uv run --with pyinstaller python scripts/build_binaries.py
+uv run python scripts/prepare_release_assets.py --python-dist --binaries --plugin
 ```
 
-仓库内置 `.github/workflows/build.yml`，会在 Windows、macOS、Linux 上运行测试、lint、wheel 构建和 PyInstaller 二进制构建，并上传构建产物。
+仓库内置 `.github/workflows/build.yml`，会在 Windows、macOS、Linux 上运行测试、lint、wheel 构建和 PyInstaller 二进制构建，并上传已按平台重命名的构建产物。
+
+## 发布流程
+
+发布正式版本时创建并推送 SemVer tag：
+
+```powershell
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+`.github/workflows/release.yml` 会在 tag 上执行跨平台质量检查，生成 Python wheel/sdist、Windows/macOS/Linux 单文件二进制、OpenClaw 插件 zip，并在 GitHub Release 中附带 `SHA256SUMS.txt` 校验和与自动 release notes。
 
 ## 贡献与安全
 

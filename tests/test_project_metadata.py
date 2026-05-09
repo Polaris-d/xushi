@@ -90,6 +90,10 @@ def test_release_workflow_publishes_tagged_artifacts() -> None:
     assert "softprops/action-gh-release" in release_workflow
     assert "actions/upload-artifact" in release_workflow
     assert "actions/download-artifact" in release_workflow
+    assert "scripts/prepare_release_assets.py" in release_workflow
+    assert "merge-multiple: true" in release_workflow
+    assert "SHA256SUMS.txt" in release_workflow
+    assert "generate_release_notes: true" in release_workflow
 
 
 def test_build_workflow_does_not_upload_pyinstaller_spec_files() -> None:

@@ -43,6 +43,7 @@
 - 提供 Windows PowerShell 与 macOS/Linux shell 安装脚本，默认安装到用户本地目录。
 - 提供 wheel 和跨平台预编译二进制构建配置，降低非 Python 用户安装门槛。
 - 提供 tag 触发的 GitHub Release 工作流，发布 wheel 与跨平台二进制产物。
+- GitHub Release 资产必须使用唯一、可读的平台命名，并包含 OpenClaw 插件包、自动 release notes 和 SHA256 校验和。
 - 提供 `.gitattributes` 控制跨平台换行，避免 shell 脚本和 CI 配置在 Windows 开发环境中被破坏。
 - 项目采用 MIT License 开源。
 - 提供贡献指南、安全策略、Issue 模板和 PR 模板，降低外部协作成本。
@@ -97,3 +98,4 @@
 | 2026-05-10 | 调整 | OpenClaw HTTPS 自签名证书改为显式 `insecure_tls` 配置，默认保持 HTTP 示例和 TLS 校验。 |
 | 2026-05-10 | 调整 | executor 配置从 SQLite/API 保存调整为 `config.json` 管理，OpenClaw 插件仅保留查看工具。 |
 | 2026-05-10 | 调整 | 默认本地 API 端口从 `8766` 调整为更高位且保留原记忆点的 `18766`。 |
+| 2026-05-10 | 调整 | GitHub Release 流程调整为分离质量检查、Python 包、平台二进制和发布步骤，并生成唯一资产名与校验和。 |

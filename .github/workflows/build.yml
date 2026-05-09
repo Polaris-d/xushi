@@ -3,7 +3,6 @@ name: build
 on:
   push:
     branches: ["main"]
-    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
@@ -27,12 +26,12 @@ jobs:
       - run: uv run ruff check .
       - run: uv build --wheel
       - run: uv run --with pyinstaller python scripts/build_binaries.py
+      - run: uv run python scripts/prepare_release_assets.py --python-dist --binaries --output-dir build/release-assets
       - uses: actions/upload-artifact@v4
         with:
           name: xushi-${{ matrix.os }}
-          path: |
-            dist/**
-            build/dist/**
+          path: build/release-assets/*
+          if-no-files-found: error
 
   openclaw-plugin:
     name: openclaw-plugin

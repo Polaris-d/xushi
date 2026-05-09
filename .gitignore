@@ -10,6 +10,7 @@ dist/
 !plugins/openclaw-xushi/dist/
 !plugins/openclaw-xushi/dist/index.js
 build/
+release-assets/
 *.spec
 node_modules/
 coverage/
