@@ -1,0 +1,40 @@
+{
+  "id": "xushi",
+  "name": "序时 xushi",
+  "description": "将 OpenClaw 接入本地序时 daemon，用于可靠创建、查询和触发日程任务。",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "baseUrl": {
+        "type": "string",
+        "description": "xushi daemon 本地 HTTP 地址，默认 http://127.0.0.1:8766"
+      },
+      "tokenEnv": {
+        "type": "string",
+        "description": "读取 API token 的环境变量名，默认 XUSHI_API_TOKEN"
+      }
+    }
+  },
+  "activation": {
+    "onCapabilities": ["tool"]
+  },
+  "contracts": {
+    "tools": [
+      "xushi_health",
+      "xushi_create_task",
+      "xushi_list_tasks",
+      "xushi_get_task",
+      "xushi_trigger_task",
+      "xushi_confirm_run",
+      "xushi_callback_run",
+      "xushi_install_hint"
+    ]
+  },
+  "toolMetadata": {
+    "xushi_install_hint": {
+      "optional": true
+    }
+  }
+}

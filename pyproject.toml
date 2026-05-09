@@ -1,0 +1,46 @@
+[project]
+name = "xushi"
+version = "0.1.0"
+description = "AI 原生的本地化日程管理与 agent 调度底座。"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "pydantic>=2.9.0",
+    "python-dateutil>=2.9.0",
+    "typer>=0.12.0",
+    "uvicorn>=0.30.0",
+]
+
+[project.scripts]
+xushi = "xushi.cli:app"
+xushi-daemon = "xushi.daemon:main"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.27.0",
+    "pytest>=8.3.0",
+    "ruff>=0.8.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.6,<0.12"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "--basetemp=.pytest-tmp"
+cache_dir = ".pytest-tmp/cache"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = [".uv-cache", ".pytest-tmp", ".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM", "D", "RUF"]
+ignore = ["D100", "D104", "D107", "D203", "D213", "D400", "D415", "RUF002"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["D"]

@@ -1,0 +1,17 @@
+.venv/
+.uv-cache/
+.pytest_cache/
+.pytest-tmp/
+__pycache__/
+*.py[cod]
+*.db
+*.sqlite
+dist/
+!plugins/openclaw-xushi/dist/
+!plugins/openclaw-xushi/dist/index.js
+build/
+*.spec
+node_modules/
+coverage/
+.ruff_cache/
+.DS_Store
