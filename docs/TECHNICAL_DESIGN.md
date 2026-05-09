@@ -90,7 +90,7 @@ SQLite 连接按操作短连接打开并立即关闭，避免 Windows 下 daemon
 
 配置优先级为环境变量高于配置文件高于默认值。默认配置文件位于状态目录下的 `config.json`，`xushi init` 可生成本地 token、SQLite 路径、监听地址、端口和后台扫描间隔；`xushi doctor` 用于检查配置文件、数据库目录和端口占用，帮助 agent 插件给出可执行的错误提示。
 
-OpenClaw executor 是 v1 唯一实现的 agent 回传路径。`mode=hooks_agent` 时，序时将 `action.payload` 转换为 OpenClaw `/hooks/agent` 请求体，字段包括 `message`、`name`、`agentId`、`sessionKey`、`wakeMode`、`deliver`、`channel`、`to`、`model`、`fallbacks`、`thinking` 和 `timeoutSeconds`。executor config 使用 snake_case，例如 `agent_id`、`session_key`、`wake_mode`、`timeout_seconds`，同时兼容 OpenClaw 的 camelCase 字段。token 优先从 executor 的 `token` 读取，其次从 `token_env` 或默认环境变量 `OPENCLAW_HOOKS_TOKEN` / `OPENCLAW_WEBHOOK_TOKEN` 读取。Hermes 和通用 webhook executor 暂时仅保留 schema 位置，调用时返回 `reserved but not implemented`，不进行网络投递。v1 不提供 command executor，避免跨平台 shell、命令注入和环境差异扩大配置复杂度。`reminder` action 在配置 `executor_id` 时会走对应 executor；没有 `executor_id` 时才走本地系统通知。
+OpenClaw executor 是 v1 唯一实现的 agent 回传路径。`mode=hooks_agent` 时，序时将 `action.payload` 转换为 OpenClaw `/hooks/agent` 请求体，字段包括 `message`、`name`、`agentId`、`wakeMode`、`deliver`、`channel`、`to`、`model`、`fallbacks`、`thinking` 和 `timeoutSeconds`。executor config 使用 snake_case，例如 `agent_id`、`wake_mode`、`timeout_seconds`，同时兼容 OpenClaw 的 camelCase 字段。token 优先从 executor 的 `token` 读取，其次从 `token_env` 或默认环境变量 `OPENCLAW_HOOKS_TOKEN` / `OPENCLAW_WEBHOOK_TOKEN` 读取。`insecure_tls` 默认 false，只有 OpenClaw Gateway 使用本机自签名 HTTPS 时才应显式启用。Hermes 和通用 webhook executor 暂时仅保留 schema 位置，调用时返回 `reserved but not implemented`，不进行网络投递。v1 不提供 command executor，避免跨平台 shell、命令注入和环境差异扩大配置复杂度。`reminder` action 在配置 `executor_id` 时会走对应 executor；没有 `executor_id` 时才走本地系统通知。
 
 长任务可在启动后异步回调 `POST /api/v1/runs/{id}/callback`，将运行记录更新为 `succeeded` 或 `failed`，并合并最终结果。
 
@@ -158,3 +158,4 @@ OpenClaw executor 是 v1 唯一实现的 agent 回传路径。`mode=hooks_agent`
 | 2026-05-10 | 调整 | OpenClaw 默认投递链路从 TaskFlow webhook 调整为 `/hooks/agent`，并新增 `hooks_agent` 载荷适配。 |
 | 2026-05-10 | 调整 | 移除 command executor；Hermes 和通用 webhook executor 暂时仅返回预留未实现状态。 |
 | 2026-05-10 | 明确 | 完善 OpenClaw `/hooks/agent` 可选字段映射，支持 snake_case 与 camelCase 配置别名。 |
+| 2026-05-10 | 调整 | OpenClaw HTTPS 自签名证书改为显式 `insecure_tls` 配置，默认保持 TLS 证书校验。 |

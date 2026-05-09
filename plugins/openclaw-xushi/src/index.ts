@@ -172,7 +172,7 @@ export default definePluginEntry({
       parameters: Type.Object({
         executor: Type.Record(Type.String(), Type.Any(), {
           description:
-            "符合 xushi Executor schema 的 JSON，例如 { id: 'openclaw', kind: 'openclaw', name: 'OpenClaw', config: { mode: 'hooks_agent', webhook_url: 'http://127.0.0.1:18789/hooks/agent', token_env: 'OPENCLAW_HOOKS_TOKEN', agent_id: 'reminder-agent', channel: 'last', deliver: true, timeout_seconds: 120 }, enabled: true }。",
+            "符合 xushi Executor schema 的 JSON，例如 { id: 'openclaw', kind: 'openclaw', name: 'OpenClaw', config: { mode: 'hooks_agent', webhook_url: 'http://127.0.0.1:18789/hooks/agent', token_env: 'OPENCLAW_HOOKS_TOKEN', agent_id: 'reminder-agent', channel: 'feishu', deliver: true, timeout_seconds: 120 }, enabled: true }。如果 OpenClaw Gateway 使用自签名 HTTPS，再显式设置 insecure_tls: true。",
         }),
       }),
       async execute(_id, params: { executor: JsonValue }) {

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import ssl
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any, ClassVar
+from urllib import request
 
 from xushi.executors import ExecutorRegistry
 from xushi.models import Action, Executor
@@ -130,6 +132,90 @@ def test_openclaw_executor_uses_token_env_for_hooks_agent(monkeypatch) -> None:
     assert result["delivered"] is True
     assert RecordingHandler.received[0]["authorization"] == "Bearer secret-from-env"
     assert RecordingHandler.received[0]["body"]["message"] == "提醒我喝水"
+
+
+def test_openclaw_executor_keeps_tls_verification_by_default(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        status = 200
+
+        def __enter__(self) -> FakeResponse:
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b'{"accepted": true}'
+
+    def fake_urlopen(
+        req: request.Request,
+        timeout: int,
+        context: ssl.SSLContext | None = None,
+    ) -> FakeResponse:
+        captured["context"] = context
+        captured["timeout"] = timeout
+        return FakeResponse()
+
+    monkeypatch.setattr("xushi.executors.request.urlopen", fake_urlopen)
+    executor = Executor(
+        id="openclaw",
+        kind="openclaw",
+        name="OpenClaw",
+        config={
+            "webhook_url": "https://127.0.0.1:18789/hooks/agent",
+            "token": "secret",
+        },
+    )
+    action = Action(type="reminder", executor_id="openclaw", payload={"message": "提醒"})
+
+    result = ExecutorRegistry().execute(action, executor)
+
+    assert result["delivered"] is True
+    assert captured["context"] is None
+
+
+def test_openclaw_executor_allows_explicit_insecure_tls(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        status = 200
+
+        def __enter__(self) -> FakeResponse:
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b'{"accepted": true}'
+
+    def fake_urlopen(
+        req: request.Request,
+        timeout: int,
+        context: ssl.SSLContext | None = None,
+    ) -> FakeResponse:
+        captured["context"] = context
+        return FakeResponse()
+
+    monkeypatch.setattr("xushi.executors.request.urlopen", fake_urlopen)
+    executor = Executor(
+        id="openclaw",
+        kind="openclaw",
+        name="OpenClaw",
+        config={
+            "webhook_url": "https://127.0.0.1:18789/hooks/agent",
+            "token": "secret",
+            "insecure_tls": True,
+        },
+    )
+    action = Action(type="reminder", executor_id="openclaw", payload={"message": "提醒"})
+
+    result = ExecutorRegistry().execute(action, executor)
+
+    assert result["delivered"] is True
+    assert isinstance(captured["context"], ssl.SSLContext)
 
 
 def test_openclaw_executor_rejects_non_hooks_agent_mode() -> None:

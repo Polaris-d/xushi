@@ -136,9 +136,8 @@ OpenClaw executor 默认通过 OpenClaw 的 `/hooks/agent` 投递提醒，让 ag
     "token_env": "OPENCLAW_HOOKS_TOKEN",
     "name": "Xushi",
     "agent_id": "reminder-agent",
-    "session_key": "hook:xushi:reminders",
     "wake_mode": "now",
-    "channel": "last",
+    "channel": "feishu",
     "to": "optional-recipient-id",
     "model": "openai/gpt-5.4-mini",
     "thinking": "low",
@@ -173,6 +172,41 @@ OpenClaw `/hooks/agent` 可选字段均可在 executor config 中配置。序时
 | `thinking` | `thinking` | 推理强度覆盖 |
 | `fallbacks` | `fallbacks` | 备用模型列表 |
 | `timeout_seconds` | `timeoutSeconds` | agent run 超时时间 |
+
+如果 OpenClaw Gateway 启用了 HTTPS 且使用自签名证书，才需要这样配置：
+
+```json
+{
+  "webhook_url": "https://127.0.0.1:18789/hooks/agent",
+  "insecure_tls": true
+}
+```
+
+默认情况下建议使用 HTTP，或为 HTTPS 配置可信证书。`insecure_tls: true` 只适合本机自签名证书场景。
+
+如果要固定由某个 agent 和飞书会话处理提醒，推荐在 OpenClaw hooks 配置里设置 `defaultSessionKey` 和 mapping，而不是从序时传 `session_key`：
+
+```json
+{
+  "hooks": {
+    "enabled": true,
+    "token": "<different-from-gateway-token>",
+    "defaultSessionKey": "agent:chase:feishu:...",
+    "mappings": [
+      {
+        "match": {"path": "agent"},
+        "action": "agent",
+        "agentId": "chase",
+        "sessionKey": "agent:chase:feishu:...",
+        "deliver": true,
+        "channel": "feishu"
+      }
+    ]
+  }
+}
+```
+
+`hooks.token` 请使用独立 token，不要复用 gateway auth token。
 
 提醒要真正发给 agent，需要在任务 action 上引用执行器：
 

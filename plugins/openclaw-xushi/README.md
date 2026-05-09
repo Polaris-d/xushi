@@ -66,7 +66,7 @@ OpenClaw config 可覆盖：
     "name": "Xushi",
     "agent_id": "reminder-agent",
     "wake_mode": "now",
-    "channel": "last",
+    "channel": "feishu",
     "deliver": true,
     "timeout_seconds": 120
   },
@@ -81,6 +81,10 @@ OpenClaw config 可覆盖：
 
 没有 `executor_id` 的 `reminder` 只会走本地系统通知，适合桌面环境，不适合无桌面的服务器。
 
-OpenClaw `/hooks/agent` 的可选字段可在 executor config 中配置：`name`、`agent_id`、`session_key`、`wake_mode`、`deliver`、`channel`、`to`、`model`、`fallbacks`、`thinking`、`timeout_seconds`。其中 `session_key` 需要 OpenClaw 允许请求指定 session key。
+OpenClaw `/hooks/agent` 的可选字段可在 executor config 中配置：`name`、`agent_id`、`wake_mode`、`deliver`、`channel`、`to`、`model`、`fallbacks`、`thinking`、`timeout_seconds`。
+
+如果 OpenClaw Gateway 启用了 HTTPS 且使用本机自签名证书，在 executor config 中显式设置 `"webhook_url": "https://127.0.0.1:18789/hooks/agent"` 和 `"insecure_tls": true`。普通 HTTP 不需要设置 `insecure_tls`；共享环境的 HTTPS 建议使用可信证书。
+
+如果要固定由某个 agent 和飞书会话处理提醒，推荐在 OpenClaw hooks 配置里设置 `defaultSessionKey` 和 mapping。不要从序时传 `session_key`，除非 OpenClaw 已显式允许请求指定 session key。hooks token 也不要复用 gateway auth token。
 
 v1 只实现 OpenClaw `/hooks/agent` 投递。Hermes 和通用 webhook executor 暂时只是预留配置位，`command` executor 已移除。

@@ -84,7 +84,7 @@ class ExecutorRegistry:
             }
         body = build_openclaw_hooks_agent_body(action.payload, executor.config)
         timeout_seconds = int(executor.config.get("request_timeout_seconds", 30))
-        insecure_tls = parse_bool(str(executor.config.get("insecure_tls", "true")))
+        insecure_tls = parse_bool(str(executor.config.get("insecure_tls", "false")))
         result = self._post_json(
             url=webhook_url,
             body=body,

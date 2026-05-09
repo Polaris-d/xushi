@@ -249,7 +249,6 @@ class XushiService:
                     "mode": "hooks_agent",
                     "webhook_url": DEFAULT_OPENCLAW_HOOKS_AGENT_URL,
                     "token_env": "OPENCLAW_HOOKS_TOKEN",
-                    "channel": "last",
                     "deliver": True,
                     "timeout_seconds": 120,
                 },

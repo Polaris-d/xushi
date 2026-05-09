@@ -126,7 +126,7 @@ Then save an executor that points directly at OpenClaw `/hooks/agent`. This path
     "name": "Xushi",
     "agent_id": "reminder-agent",
     "wake_mode": "now",
-    "channel": "last",
+    "channel": "feishu",
     "deliver": true,
     "timeout_seconds": 120
   },
@@ -136,7 +136,20 @@ Then save an executor that points directly at OpenClaw `/hooks/agent`. This path
 
 Reminder tasks must set `action.executor_id` to `openclaw`.
 
-Optional OpenClaw `/hooks/agent` fields can also be configured in snake_case: `agent_id`, `session_key`, `wake_mode`, `channel`, `to`, `model`, `fallbacks`, `thinking`, and `timeout_seconds`. `session_key` requires OpenClaw to allow request-provided session keys.
+Optional OpenClaw `/hooks/agent` fields can also be configured in snake_case: `agent_id`, `wake_mode`, `channel`, `to`, `model`, `fallbacks`, `thinking`, and `timeout_seconds`.
+
+If OpenClaw Gateway uses HTTPS with a self-signed local certificate, set:
+
+```json
+{
+  "webhook_url": "https://127.0.0.1:18789/hooks/agent",
+  "insecure_tls": true
+}
+```
+
+Use `insecure_tls` only for local self-signed certificates. For normal HTTP, omit it. For HTTPS in shared environments, prefer a trusted certificate.
+
+If the user wants a specific OpenClaw agent and Feishu session, configure `defaultSessionKey` and a hooks mapping on the OpenClaw side. Do not pass `session_key` from xushi unless OpenClaw explicitly allows request-provided session keys. The hooks token must be different from the gateway auth token.
 
 ### Notes
 

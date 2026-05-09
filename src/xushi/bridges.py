@@ -26,10 +26,10 @@ def build_openclaw_hooks_agent_body(
         "name": str(_config_value(config, "name", default="xushi")),
         "wakeMode": str(_config_value(config, "wake_mode", "wakeMode", default="now")),
         "deliver": _config_bool(config, "deliver", default=True),
-        "channel": str(_config_value(config, "channel", default="last")),
         "timeoutSeconds": timeout_seconds,
     }
     optional_fields = {
+        "channel": _config_value(config, "channel"),
         "to": _config_value(config, "to"),
         "agentId": _config_value(config, "agent_id", "agentId"),
         "sessionKey": _config_value(config, "session_key", "sessionKey"),

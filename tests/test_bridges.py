@@ -52,3 +52,12 @@ def test_openclaw_hooks_agent_body_accepts_camel_case_config_fields() -> None:
     assert body["wakeMode"] == "now"
     assert body["timeoutSeconds"] == 90
     assert body["deliver"] is True
+
+
+def test_openclaw_hooks_agent_body_does_not_default_channel_to_last() -> None:
+    body = build_openclaw_hooks_agent_body(
+        payload={"message": "提醒"},
+        config={},
+    )
+
+    assert "channel" not in body
