@@ -2,6 +2,7 @@
 
 import json
 from datetime import UTC, datetime
+from pathlib import Path
 
 from typer.testing import CliRunner
 
@@ -79,3 +80,52 @@ def test_cli_doctor_reports_config_and_database_path(tmp_path) -> None:
     assert report["database_path"] == str(state_dir / "xushi.db")
     assert "api_token" in report
     assert report["executors"][0]["id"] == "openclaw"
+
+
+def test_cli_upgrade_status_reports_local_paths(tmp_path, monkeypatch) -> None:
+    config_path = tmp_path / "config.json"
+    state_dir = tmp_path / "state"
+    init_result = CliRunner().invoke(
+        app,
+        [
+            "init",
+            "--config-path",
+            str(config_path),
+            "--state-dir",
+            str(state_dir),
+        ],
+    )
+    assert init_result.exit_code == 0
+    monkeypatch.setenv("XUSHI_CONFIG_PATH", str(config_path))
+
+    result = CliRunner().invoke(app, ["upgrade", "status"])
+
+    assert result.exit_code == 0
+    report = json.loads(result.output)
+    assert report["config_path"] == str(config_path)
+    assert report["database_path"] == str(state_dir / "xushi.db")
+    assert report["backups"] == []
+
+
+def test_cli_upgrade_backup_creates_manual_backup(tmp_path, monkeypatch) -> None:
+    config_path = tmp_path / "config.json"
+    state_dir = tmp_path / "state"
+    init_result = CliRunner().invoke(
+        app,
+        [
+            "init",
+            "--config-path",
+            str(config_path),
+            "--state-dir",
+            str(state_dir),
+        ],
+    )
+    assert init_result.exit_code == 0
+    monkeypatch.setenv("XUSHI_CONFIG_PATH", str(config_path))
+
+    result = CliRunner().invoke(app, ["upgrade", "backup"])
+
+    assert result.exit_code == 0
+    report = json.loads(result.output)
+    assert report["id"].startswith("upgrade-")
+    assert (Path(report["path"]) / "config.json").exists()

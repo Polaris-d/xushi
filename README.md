@@ -275,6 +275,20 @@ git push origin v0.1.0
 
 `.github/workflows/release.yml` 会在 tag 上执行跨平台质量检查，生成 Python wheel/sdist、Windows/macOS/Linux 单文件二进制、OpenClaw 插件 zip，并在 GitHub Release 中附带 `SHA256SUMS.txt` 校验和与自动 release notes。
 
+## 手动安全升级
+
+序时不会静默自动升级。用户需要显式执行 CLI 命令，升级器会先备份本地配置和 SQLite 数据，再修改安装目录：
+
+```powershell
+uv run xushi upgrade status
+uv run xushi upgrade check --version v0.1.1
+uv run xushi upgrade backup
+uv run xushi upgrade apply --version v0.1.1 --yes
+uv run xushi upgrade rollback
+```
+
+当前 `upgrade apply` 面向 `git clone` 安装目录：升级前会检查 daemon 是否可能正在运行、检查安装目录是否有未提交改动、备份 `config.json` 与 `xushi.db`，然后执行 `git fetch --tags --prune`、`git checkout --detach <version>` 或 `git pull --ff-only`、`uv sync`。如果只想升级当前分支到远程最新版本，可以省略 `--version`。
+
 ## 贡献与安全
 
 - 贡献指南：[CONTRIBUTING.md](CONTRIBUTING.md)

@@ -162,3 +162,25 @@ If the user wants a specific OpenClaw agent and Feishu session, configure `defau
 - Do not commit the generated local config file.
 - Do not paste the full local token into public issues, logs, or documentation.
 - If port `18766` is occupied, set `XUSHI_PORT` before running `xushi-daemon`.
+
+### Manual upgrade
+
+xushi does not silently auto-upgrade. For source installs created by this guide, use the CLI upgrade flow:
+
+```bash
+cd ~/.xushi/app
+uv run xushi upgrade status
+uv run xushi upgrade apply --yes
+```
+
+For a specific release tag:
+
+```bash
+uv run xushi upgrade apply --version v0.1.1 --yes
+```
+
+The upgrade command creates a backup of the local config and SQLite database before changing the install directory. If the upgrade fails or the user wants to restore data, run:
+
+```bash
+uv run xushi upgrade rollback
+```

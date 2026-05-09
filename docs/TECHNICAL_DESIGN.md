@@ -44,6 +44,7 @@ flowchart LR
 - `xushi.service`：应用服务层。
 - `xushi.api`：本地 HTTP API 和 Web 管理台。
 - `xushi.cli`：命令行入口。
+- `xushi.upgrade`：手动 CLI 安全升级、备份和回滚。
 - `plugins/openclaw-xushi`：OpenClaw 原生插件。
 - `xushi.executors`：OpenClaw 执行器调用；Hermes 和通用 webhook executor 暂时仅保留预留位置。
 
@@ -133,6 +134,8 @@ OpenClaw executor 是 v1 唯一实现的 agent 回传路径。`mode=hooks_agent`
 - `.github/workflows/build.yml` 在 Windows、macOS、Linux 上执行测试、ruff、wheel 构建和二进制构建，并上传已按平台重命名的构建产物，不上传 PyInstaller 临时 `.spec` 文件。
 - `scripts/prepare_release_assets.py` 负责将 PyInstaller 二进制重命名为 `xushi-<platform>`、`xushi-daemon-<platform>`，复制 Python wheel/sdist，并打包 OpenClaw 插件 zip。
 - `.github/workflows/release.yml` 在 `v*` tag 上先运行跨平台质量检查，再分别构建 Python 包和平台二进制，最后合并 release 资产、生成 `SHA256SUMS.txt` 并发布 GitHub Release 自动说明。
+- `xushi upgrade status/check/backup/apply/rollback` 提供用户手动触发的安全升级能力。升级器默认不做静默自动升级；`apply` 当前面向 git 安装目录，先检查 daemon 端口和工作区干净度，再备份配置和 SQLite 数据库，随后执行 `git fetch --tags --prune`、`git checkout --detach <version>` 或 `git pull --ff-only`、`uv sync`。
+- 升级备份存放在配置目录的 `backups/upgrade-<timestamp>` 下，包含 `config.json`、通过 SQLite backup API 生成的一致性数据库快照、存在的 WAL/SHM sidecar 和 `manifest.json`。`rollback` 根据 manifest 恢复原路径，恢复主数据库前会清理现有 WAL/SHM sidecar，避免旧 sidecar 干扰恢复数据。
 - `.gitattributes` 固定 shell、Python、Markdown、YAML、JSON、TOML、TS/JS 为 LF，PowerShell 脚本为 CRLF，避免跨平台安装脚本换行损坏。
 - 项目根目录提供 MIT License，`pyproject.toml` 声明 `license = "MIT"`。
 - 项目根目录提供 `CONTRIBUTING.md` 和 `SECURITY.md`，`.github` 下提供 Issue 模板和 PR 模板，统一外部反馈格式。
@@ -163,3 +166,4 @@ OpenClaw executor 是 v1 唯一实现的 agent 回传路径。`mode=hooks_agent`
 | 2026-05-10 | 调整 | executor 配置从 SQLite/API 写入调整为 `config.json` 管理，API 和 OpenClaw 插件仅保留只读查看能力。 |
 | 2026-05-10 | 调整 | 默认 daemon 端口从 `8766` 调整为 `18766`，避开低位常见开发端口并保留旧端口记忆点。 |
 | 2026-05-10 | 调整 | 重构 GitHub Release workflow，拆分质量检查、Python 包、平台二进制和发布步骤，增加唯一资产命名、插件 zip 和 SHA256 校验和。 |
+| 2026-05-10 | 新增 | 增加手动 CLI 安全升级设计，提供 status/check/backup/apply/rollback，并在升级前使用 SQLite backup API 创建可回滚备份。 |

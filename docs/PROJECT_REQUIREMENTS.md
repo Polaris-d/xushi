@@ -41,6 +41,9 @@
 - 提供诊断命令，检查配置文件、数据库目录和监听端口，帮助用户定位 daemon 跑不起来的问题。
 - 提供面向人类复制给 LLM Agent 的安装提示词和 agent 可读安装指南。
 - 提供 Windows PowerShell 与 macOS/Linux shell 安装脚本，默认安装到用户本地目录。
+- 提供用户手动触发的 CLI 安全升级能力；序时不得静默自动升级。
+- 手动升级必须先备份 `config.json`、SQLite 数据库和存在的 WAL/SHM sidecar，升级失败时不得丢失旧数据。
+- 手动升级必须支持查看状态、检查目标版本、创建备份、执行升级和从备份恢复。
 - 提供 wheel 和跨平台预编译二进制构建配置，降低非 Python 用户安装门槛。
 - 提供 tag 触发的 GitHub Release 工作流，发布 wheel 与跨平台二进制产物。
 - GitHub Release 资产必须使用唯一、可读的平台命名，并包含 OpenClaw 插件包、自动 release notes 和 SHA256 校验和。
@@ -99,3 +102,4 @@
 | 2026-05-10 | 调整 | executor 配置从 SQLite/API 保存调整为 `config.json` 管理，OpenClaw 插件仅保留查看工具。 |
 | 2026-05-10 | 调整 | 默认本地 API 端口从 `8766` 调整为更高位且保留原记忆点的 `18766`。 |
 | 2026-05-10 | 调整 | GitHub Release 流程调整为分离质量检查、Python 包、平台二进制和发布步骤，并生成唯一资产名与校验和。 |
+| 2026-05-10 | 新增 | 增加用户手动触发的 CLI 安全升级需求，要求升级前备份配置和 SQLite 数据，并支持 rollback。 |
