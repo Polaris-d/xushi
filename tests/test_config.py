@@ -28,6 +28,11 @@ def test_write_initial_config_creates_local_token_and_paths(tmp_path, monkeypatc
     assert saved["host"] == "127.0.0.1"
     assert saved["port"] == 8766
     assert saved["scheduler_interval_seconds"] == 30
+    assert saved["executors"][0]["id"] == "openclaw"
+    assert saved["executors"][0]["config"]["mode"] == "hooks_agent"
+    assert saved["executors"][0]["config"]["webhook_url"] == (
+        "http://127.0.0.1:18789/hooks/agent"
+    )
     assert json.loads(config_path.read_text(encoding="utf-8")) == saved
 
 
@@ -54,6 +59,7 @@ def test_settings_loads_config_file_before_defaults(tmp_path, monkeypatch) -> No
     assert settings.database_path == database_path
     assert settings.port == 9876
     assert settings.scheduler_interval_seconds == 7
+    assert [executor.id for executor in settings.executors] == ["openclaw", "hermes", "webhook"]
 
 
 def test_environment_variables_override_config_file(tmp_path, monkeypatch) -> None:
@@ -82,3 +88,51 @@ def test_environment_variables_override_config_file(tmp_path, monkeypatch) -> No
     assert settings.database_path == Path(tmp_path / "env.db")
     assert settings.port == 9999
     assert settings.scheduler_interval_seconds == 3
+
+
+def test_settings_loads_executor_configuration_from_config_file(tmp_path, monkeypatch) -> None:
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "api_token": "token-from-config",
+                "database_path": str(tmp_path / "xushi.db"),
+                "executors": [
+                    {
+                        "id": "openclaw",
+                        "kind": "openclaw",
+                        "name": "OpenClaw",
+                        "config": {
+                            "mode": "hooks_agent",
+                            "webhook_url": "http://127.0.0.1:18789/hooks/agent",
+                            "token_env": "OPENCLAW_HOOKS_TOKEN",
+                            "agent_id": "chase",
+                            "channel": "feishu",
+                            "deliver": True,
+                        },
+                        "enabled": True,
+                    },
+                    {
+                        "id": "custom-feishu",
+                        "kind": "webhook",
+                        "name": "Feishu Webhook",
+                        "config": {
+                            "mode": "template",
+                            "webhook_url": "http://127.0.0.1:3000/custom",
+                        },
+                        "enabled": False,
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("XUSHI_CONFIG_PATH", str(config_path))
+    monkeypatch.delenv("XUSHI_API_TOKEN", raising=False)
+    monkeypatch.delenv("XUSHI_DATABASE_PATH", raising=False)
+
+    settings = Settings.from_env()
+
+    assert [executor.id for executor in settings.executors] == ["openclaw", "custom-feishu"]
+    assert settings.executors[0].config["agent_id"] == "chase"
+    assert settings.executors[1].enabled is False

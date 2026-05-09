@@ -11,8 +11,7 @@
 - `xushi_trigger_task`：手动触发任务。
 - `xushi_confirm_run`：确认运行记录已完成，停止后续跟进。
 - `xushi_callback_run`：提交长任务最终结果。
-- `xushi_list_executors`：列出执行器配置。
-- `xushi_save_executor`：创建或更新执行器配置。
+- `xushi_list_executors`：列出 `~/.xushi/config.json` 中的执行器配置。
 - `xushi_install_hint`：返回安装和启动指引。
 
 ## 配置
@@ -52,7 +51,7 @@ OpenClaw config 可覆盖：
 
 ## 提醒投递到 Agent
 
-序时 daemon 不能自动调用 OpenClaw 插件本身。要让提醒进入 OpenClaw/飞书等 agent 渠道，推荐配置 OpenClaw hooks agent executor：
+序时 daemon 不能自动调用 OpenClaw 插件本身。要让提醒进入 OpenClaw/飞书等 agent 渠道，请把 OpenClaw hooks agent executor 写入 `~/.xushi/config.json` 的 `executors` 数组，然后重启 daemon：
 
 ```json
 {

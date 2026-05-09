@@ -63,7 +63,7 @@ export default definePluginEntry({
     api.registerTool({
       name: "xushi_create_task",
       description:
-        "创建结构化序时任务。请先把用户自然语言转换为 xushi task schema：schedule 必须包含 timezone；尽快任务用 asap，一次性任务用 ISO run_at，循环任务用 RRULE。若用户希望提醒通过 OpenClaw/飞书等 agent 渠道送达，请先配置 executor，并在 task.action.executor_id 中引用它。",
+        "创建结构化序时任务。请先把用户自然语言转换为 xushi task schema：schedule 必须包含 timezone；尽快任务用 asap，一次性任务用 ISO run_at，循环任务用 RRULE。若用户希望提醒通过 OpenClaw/飞书等 agent 渠道送达，请先在 ~/.xushi/config.json 配置 executor，并在 task.action.executor_id 中引用它。",
       parameters: Type.Object({
         task: Type.Record(Type.String(), Type.Any(), {
           description: "符合 xushi TaskCreate schema 的任务 JSON。",
@@ -158,30 +158,11 @@ export default definePluginEntry({
 
     api.registerTool({
       name: "xushi_list_executors",
-      description: "列出本机 xushi 执行器配置，用于确认 OpenClaw /hooks/agent 投递链路是否可用。",
+      description:
+        "列出本机 xushi config.json 中的执行器配置，用于确认 OpenClaw /hooks/agent 投递链路是否可用。",
       parameters: Type.Object({}),
       async execute() {
         return textResult(await xushiRequest(config, "/api/v1/executors"));
-      },
-    });
-
-    api.registerTool({
-      name: "xushi_save_executor",
-      description:
-        "创建或更新 xushi 执行器。v1 仅实现 OpenClaw /hooks/agent；Hermes/webhook 暂时只是预留 executor，command 已移除。",
-      parameters: Type.Object({
-        executor: Type.Record(Type.String(), Type.Any(), {
-          description:
-            "符合 xushi Executor schema 的 JSON，例如 { id: 'openclaw', kind: 'openclaw', name: 'OpenClaw', config: { mode: 'hooks_agent', webhook_url: 'http://127.0.0.1:18789/hooks/agent', token_env: 'OPENCLAW_HOOKS_TOKEN', agent_id: 'reminder-agent', channel: 'feishu', deliver: true, timeout_seconds: 120 }, enabled: true }。如果 OpenClaw Gateway 使用自签名 HTTPS，再显式设置 insecure_tls: true。",
-        }),
-      }),
-      async execute(_id, params: { executor: JsonValue }) {
-        return textResult(
-          await xushiRequest(config, "/api/v1/executors", {
-            method: "POST",
-            body: JSON.stringify(params.executor),
-          }),
-        );
       },
     });
 

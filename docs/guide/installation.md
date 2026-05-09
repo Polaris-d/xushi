@@ -106,35 +106,41 @@ XUSHI_BASE_URL=http://127.0.0.1:8766
 
 For OpenClaw, use the plugin in `plugins/openclaw-xushi` and configure `tokenEnv` as `XUSHI_API_TOKEN`.
 
-If reminders should be delivered back into OpenClaw, enable OpenClaw hooks and configure an executor. Prefer passing OpenClaw hook secrets through the daemon environment instead of storing them in xushi task or executor JSON:
+If reminders should be delivered back into OpenClaw, enable OpenClaw hooks and configure an executor in `~/.xushi/config.json`. Prefer passing OpenClaw hook secrets through the daemon environment instead of storing them in xushi task or executor JSON:
 
 ```bash
 export OPENCLAW_HOOKS_TOKEN="<local-openclaw-hooks-token>"
 ```
 
-Then save an executor that points directly at OpenClaw `/hooks/agent`. This path lets OpenClaw run an agent turn and deliver the reply through the configured chat channel, such as Feishu.
+Then edit the `executors` array so the OpenClaw executor points directly at OpenClaw `/hooks/agent`. This path lets OpenClaw run an agent turn and deliver the reply through the configured chat channel, such as Feishu. Restart `xushi-daemon` after editing the file.
 
 ```json
 {
-  "id": "openclaw",
-  "kind": "openclaw",
-  "name": "OpenClaw",
-  "config": {
-    "mode": "hooks_agent",
-    "webhook_url": "http://127.0.0.1:18789/hooks/agent",
-    "token_env": "OPENCLAW_HOOKS_TOKEN",
-    "name": "Xushi",
-    "agent_id": "reminder-agent",
-    "wake_mode": "now",
-    "channel": "feishu",
-    "deliver": true,
-    "timeout_seconds": 120
-  },
-  "enabled": true
+  "executors": [
+    {
+      "id": "openclaw",
+      "kind": "openclaw",
+      "name": "OpenClaw",
+      "config": {
+        "mode": "hooks_agent",
+        "webhook_url": "http://127.0.0.1:18789/hooks/agent",
+        "token_env": "OPENCLAW_HOOKS_TOKEN",
+        "name": "Xushi",
+        "agent_id": "reminder-agent",
+        "wake_mode": "now",
+        "channel": "feishu",
+        "deliver": true,
+        "timeout_seconds": 120
+      },
+      "enabled": true
+    }
+  ]
 }
 ```
 
 Reminder tasks must set `action.executor_id` to `openclaw`.
+
+Use `xushi executors` to confirm what the daemon loaded from `config.json`.
 
 Optional OpenClaw `/hooks/agent` fields can also be configured in snake_case: `agent_id`, `wake_mode`, `channel`, `to`, `model`, `fallbacks`, `thinking`, and `timeout_seconds`.
 

@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from xushi.bridges import DEFAULT_OPENCLAW_HOOKS_AGENT_URL
 from xushi.config import Settings
 from xushi.executors import ExecutorRegistry
 from xushi.models import (
@@ -32,7 +31,9 @@ class XushiService:
         self.scheduler = Scheduler()
         self.notifications = NotificationDispatcher()
         self.executors = ExecutorRegistry(self.notifications)
-        self._ensure_builtin_executors()
+        self._executor_map = {
+            executor.id: executor for executor in settings.executors if executor.enabled
+        }
 
     def create_task(self, request: TaskCreate) -> Task:
         """创建任务。"""
@@ -81,7 +82,7 @@ class XushiService:
         scheduled_for = now or datetime.now(tz=UTC)
         executor = None
         if task.action.executor_id:
-            executor = self.store.get_executor(task.action.executor_id)
+            executor = self._get_executor(task.action.executor_id)
         task.action.payload.setdefault("title", task.title)
         task.action.payload.setdefault("task_id", task.id)
         result = self.executors.execute(task.action, executor)
@@ -191,7 +192,7 @@ class XushiService:
                 continue
             executor = None
             if task.action.executor_id:
-                executor = self.store.get_executor(task.action.executor_id)
+                executor = self._get_executor(task.action.executor_id)
             task.action.payload["title"] = task.title
             task.action.payload["task_id"] = task.id
             task.action.payload["kind"] = "follow_up"
@@ -229,34 +230,15 @@ class XushiService:
 
     def list_executors(self) -> list[Executor]:
         """列出执行器。"""
-        return self.store.list_executors()
-
-    def save_executor(self, executor: Executor) -> Executor:
-        """保存执行器。"""
-        return self.store.save_executor(executor)
+        return list(self.settings.executors)
 
     def list_notifications(self) -> list[NotificationEvent]:
         """列出通知事件。"""
         return self.store.list_notifications()
 
-    def _ensure_builtin_executors(self) -> None:
-        for executor in (
-            Executor(
-                id="openclaw",
-                kind="openclaw",
-                name="OpenClaw",
-                config={
-                    "mode": "hooks_agent",
-                    "webhook_url": DEFAULT_OPENCLAW_HOOKS_AGENT_URL,
-                    "token_env": "OPENCLAW_HOOKS_TOKEN",
-                    "deliver": True,
-                    "timeout_seconds": 120,
-                },
-            ),
-            Executor(id="hermes", kind="hermes", name="Hermes", config={"mode": "template"}),
-        ):
-            if self.store.get_executor(executor.id) is None:
-                self.store.save_executor(executor)
+    def _get_executor(self, executor_id: str) -> Executor | None:
+        """按 ID 获取启用的 executor 配置。"""
+        return self._executor_map.get(executor_id)
 
     def _group_follow_ups_by_origin(self, runs: list[Run]) -> dict[str, list[Run]]:
         grouped: dict[str, list[Run]] = {}

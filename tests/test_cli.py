@@ -78,3 +78,4 @@ def test_cli_doctor_reports_config_and_database_path(tmp_path) -> None:
     assert report["config_path"] == str(config_path)
     assert report["database_path"] == str(state_dir / "xushi.db")
     assert "api_token" in report
+    assert report["executors"][0]["id"] == "openclaw"

@@ -89,6 +89,14 @@ def doctor(
         "port_status": _check_port(settings.host, settings.port),
         "scheduler_interval_seconds": settings.scheduler_interval_seconds,
         "api_token": _mask_token(settings.api_token),
+        "executors": [
+            {
+                "id": executor.id,
+                "kind": executor.kind,
+                "enabled": executor.enabled,
+            }
+            for executor in settings.executors
+        ],
     }
     typer.echo(json.dumps(report, ensure_ascii=False, indent=2))
 
@@ -124,10 +132,25 @@ def tick() -> None:
 
 @app.command()
 def executor(executor_file: Path) -> None:
-    """创建或更新执行器。"""
+    """校验 executor 配置片段。"""
     payload = json.loads(executor_file.read_text(encoding="utf-8"))
-    saved = _service().save_executor(Executor.model_validate(payload))
-    typer.echo(saved.model_dump_json(indent=2))
+    executor_config = Executor.model_validate(payload)
+    output = {
+        "valid": True,
+        "message": (
+            "executor 需要写入 ~/.xushi/config.json 的 executors 数组, "
+            "然后重启 daemon 生效。"
+        ),
+        "executor": executor_config.model_dump(mode="json"),
+    }
+    typer.echo(json.dumps(output, ensure_ascii=False, indent=2))
+
+
+@app.command("executors")
+def list_executors() -> None:
+    """列出当前配置中的 executor。"""
+    executors = [executor.model_dump(mode="json") for executor in _service().list_executors()]
+    typer.echo(json.dumps(executors, ensure_ascii=False, indent=2))
 
 
 @app.command()

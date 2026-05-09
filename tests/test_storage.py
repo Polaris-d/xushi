@@ -1,5 +1,6 @@
 """SQLite 存储资源释放测试。"""
 
+import sqlite3
 from datetime import UTC, datetime
 
 from xushi.config import Settings
@@ -26,3 +27,16 @@ def test_sqlite_connections_are_closed_after_operations(tmp_path) -> None:
     database_path.unlink()
 
     assert not database_path.exists()
+
+
+def test_sqlite_schema_does_not_store_executor_configuration(tmp_path) -> None:
+    database_path = tmp_path / "xushi.db"
+
+    XushiService(Settings(database_path=database_path, api_token="test-token"))
+
+    with sqlite3.connect(database_path) as conn:
+        row = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'executors'"
+        ).fetchone()
+
+    assert row is None

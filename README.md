@@ -59,7 +59,7 @@ curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scr
 | 能力 | 状态 | 说明 |
 | --- | --- | --- |
 | Python daemon | 可用 | FastAPI + SQLite，本地调度与 API |
-| CLI | 可用 | `init`、`doctor`、`create`、`list`、`trigger`、`tick`、`executor`、`notifications` |
+| CLI | 可用 | `init`、`doctor`、`create`、`list`、`trigger`、`tick`、`executors`、`notifications` |
 | Web 管理台 | 可用 | 访问 daemon 根路径查看任务、运行记录和通知 |
 | OpenClaw 插件 | 可用 | `plugins/openclaw-xushi`，提供创建、查询、触发、确认和 callback 工具 |
 | 跟进闭环 | 可用 | 未确认任务按策略重复提醒，确认后停止 |
@@ -123,39 +123,43 @@ uv run xushi doctor
 
 ## 配置 Agent Executor
 
-OpenClaw executor 默认通过 OpenClaw 的 `/hooks/agent` 投递提醒，让 agent 处理消息并通过已配置的聊天 channel 送达用户。请先在 OpenClaw 中启用 hooks，并配置独立 hook token。
+OpenClaw executor 默认通过 OpenClaw 的 `/hooks/agent` 投递提醒，让 agent 处理消息并通过已配置的聊天 channel 送达用户。executor 不存入 SQLite，也不能通过 API 写入；请在 `~/.xushi/config.json` 的 `executors` 数组中配置，然后重启 `xushi-daemon` 生效。
 
 ```json
 {
-  "id": "openclaw",
-  "kind": "openclaw",
-  "name": "OpenClaw",
-  "config": {
-    "mode": "hooks_agent",
-    "webhook_url": "http://127.0.0.1:18789/hooks/agent",
-    "token_env": "OPENCLAW_HOOKS_TOKEN",
-    "name": "Xushi",
-    "agent_id": "reminder-agent",
-    "wake_mode": "now",
-    "channel": "feishu",
-    "to": "optional-recipient-id",
-    "model": "openai/gpt-5.4-mini",
-    "thinking": "low",
-    "fallbacks": ["openai/gpt-5.4"],
-    "deliver": true,
-    "timeout_seconds": 120
-  },
-  "enabled": true
+  "executors": [
+    {
+      "id": "openclaw",
+      "kind": "openclaw",
+      "name": "OpenClaw",
+      "config": {
+        "mode": "hooks_agent",
+        "webhook_url": "http://127.0.0.1:18789/hooks/agent",
+        "token_env": "OPENCLAW_HOOKS_TOKEN",
+        "name": "Xushi",
+        "agent_id": "reminder-agent",
+        "wake_mode": "now",
+        "channel": "feishu",
+        "to": "optional-recipient-id",
+        "model": "openai/gpt-5.4-mini",
+        "thinking": "low",
+        "fallbacks": ["openai/gpt-5.4"],
+        "deliver": true,
+        "timeout_seconds": 120
+      },
+      "enabled": true
+    }
+  ]
 }
 ```
 
-保存执行器：
+可以用下面的命令查看 daemon 当前读到的 executor 配置：
 
 ```powershell
-uv run xushi executor .\executor.openclaw.json
+uv run xushi executors
 ```
 
-通过 OpenClaw 插件也可以使用 `xushi_save_executor` 保存执行器。
+`uv run xushi executor .\executor.openclaw.json` 只用于校验单个 executor 配置片段，不会写入数据库或运行态配置。OpenClaw 插件也只提供 `xushi_list_executors` 查看工具；配置写入由本地 `config.json` 管理。
 
 OpenClaw `/hooks/agent` 可选字段均可在 executor config 中配置。序时使用 snake_case，发送给 OpenClaw 时转换为官方 camelCase：
 

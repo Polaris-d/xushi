@@ -26,13 +26,14 @@
 - 每次触发生成可审计运行记录。
 - agent/聊天渠道优先通知：提醒任务配置 `executor_id` 时必须通过对应 executor 投递；未配置 executor 的 reminder 仅使用本地系统通知和 Web 管理台记录。
 - 内置 OpenClaw、Hermes、webhook executor 概念。
+- executor 配置必须存放在本地 `config.json` 的 `executors` 数组中，数据库不保存 executor 配置。
 - OpenClaw executor 默认使用 `mode=hooks_agent` 调用 OpenClaw `/hooks/agent`，让 OpenClaw agent 处理提醒文本并通过 `deliver=true` 投递到聊天渠道。
 - OpenClaw executor 必须支持 `token_env`，避免把 OpenClaw hook token 写入任务或 executor JSON。
 - OpenClaw executor 必须支持 `/hooks/agent` 的可选字段：`name`、`agent_id`、`wake_mode`、`deliver`、`channel`、`to`、`model`、`fallbacks`、`thinking`、`timeout_seconds`。
 - OpenClaw executor 必须暴露 `insecure_tls` 配置项；默认保持 TLS 证书校验，仅在用户显式配置本机自签名 HTTPS 时关闭校验。
 - Hermes 和通用 webhook executor v1 仅保留 schema 位置，调用时返回明确未实现状态。
 - v1 暂不提供 command executor，避免跨平台 shell、命令注入和环境差异扩大配置复杂度。
-- OpenClaw 插件必须提供执行器查看和保存工具，方便 agent 自助配置提醒投递链路。
+- OpenClaw 插件必须提供执行器查看工具；executor 写入由本地 `config.json` 管理，不通过 API 或插件保存。
 - 长任务支持执行器异步回调最终结果，更新运行记录成功或失败状态。
 - 提供 CLI 和本地 Web 管理台。
 - 提供 OpenClaw TypeScript 原生插件。
@@ -94,3 +95,4 @@
 | 2026-05-10 | 调整 | 移除 command executor；Hermes 和通用 webhook executor 暂时仅保留预留位置不实现投递。 |
 | 2026-05-10 | 明确 | 完善 OpenClaw `/hooks/agent` 可选字段映射，支持指定 agent、session、channel、recipient、model、fallbacks 和 thinking。 |
 | 2026-05-10 | 调整 | OpenClaw HTTPS 自签名证书改为显式 `insecure_tls` 配置，默认保持 HTTP 示例和 TLS 校验。 |
+| 2026-05-10 | 调整 | executor 配置从 SQLite/API 保存调整为 `config.json` 管理，OpenClaw 插件仅保留查看工具。 |

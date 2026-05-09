@@ -56,6 +56,20 @@ def test_openclaw_hooks_agent_uses_environment_configuration() -> None:
     assert "xushi-notify-" not in bridge
     assert "build_openclaw_hooks_agent_body" in bridge
     assert "mode\": \"hooks_agent\"" in readme
+    assert "~/.xushi/config.json" in readme
+
+
+def test_openclaw_plugin_does_not_mutate_executor_configuration() -> None:
+    manifest = (ROOT / "plugins" / "openclaw-xushi" / "openclaw.plugin.json").read_text(
+        encoding="utf-8"
+    )
+    source = (ROOT / "plugins" / "openclaw-xushi" / "src" / "index.ts").read_text(
+        encoding="utf-8"
+    )
+
+    assert "xushi_list_executors" in manifest
+    assert "xushi_save_executor" not in manifest
+    assert "xushi_save_executor" not in source
 
 
 def test_line_endings_are_controlled_for_cross_platform_scripts() -> None:

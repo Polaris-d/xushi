@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from xushi.api import create_app
 from xushi.config import Settings
+from xushi.models import Executor
 
 
 def test_create_and_fetch_task(tmp_path) -> None:
@@ -128,6 +129,44 @@ def test_list_notifications_endpoint(tmp_path) -> None:
 
     assert response.status_code == 200
     assert response.json()["data"] == []
+
+
+def test_executor_api_is_read_only_and_uses_config_file(tmp_path) -> None:
+    settings = Settings(
+        database_path=tmp_path / "xushi.db",
+        api_token="test-token",
+        executors=(
+            Executor(
+                id="openclaw",
+                kind="openclaw",
+                name="OpenClaw",
+                config={
+                    "mode": "hooks_agent",
+                    "webhook_url": "http://127.0.0.1:18789/hooks/agent",
+                },
+            ),
+        ),
+    )
+    client = TestClient(create_app(settings))
+
+    list_response = client.get(
+        "/api/v1/executors",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    post_response = client.post(
+        "/api/v1/executors",
+        headers={"Authorization": "Bearer test-token"},
+        json={
+            "id": "custom",
+            "kind": "webhook",
+            "name": "Custom",
+            "config": {},
+        },
+    )
+
+    assert list_response.status_code == 200
+    assert list_response.json()["data"][0]["id"] == "openclaw"
+    assert post_response.status_code == 405
 
 
 def test_run_callback_endpoint_updates_status(tmp_path) -> None:

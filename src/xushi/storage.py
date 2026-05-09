@@ -8,7 +8,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from xushi.models import Executor, Run, Task
+from xushi.models import Run, Task
 from xushi.notifications import NotificationEvent
 
 
@@ -51,16 +51,6 @@ class SQLiteStore:
                     payload TEXT NOT NULL,
                     scheduled_for TEXT NOT NULL,
                     status TEXT NOT NULL
-                )
-                """
-            )
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS executors (
-                    id TEXT PRIMARY KEY,
-                    payload TEXT NOT NULL,
-                    kind TEXT NOT NULL,
-                    enabled INTEGER NOT NULL
                 )
                 """
             )
@@ -159,39 +149,6 @@ class SQLiteStore:
         if row is None:
             return None
         return Run.model_validate_json(row["payload"])
-
-    def save_executor(self, executor: Executor) -> Executor:
-        """保存执行器。"""
-        with self._connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO executors (id, payload, kind, enabled)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET
-                    payload = excluded.payload,
-                    kind = excluded.kind,
-                    enabled = excluded.enabled
-                """,
-                (executor.id, executor.model_dump_json(), executor.kind, int(executor.enabled)),
-            )
-        return executor
-
-    def list_executors(self) -> list[Executor]:
-        """返回所有执行器。"""
-        with self._connect() as conn:
-            rows = conn.execute("SELECT payload FROM executors ORDER BY id").fetchall()
-        return [Executor.model_validate_json(row["payload"]) for row in rows]
-
-    def get_executor(self, executor_id: str) -> Executor | None:
-        """按 ID 获取执行器。"""
-        with self._connect() as conn:
-            row = conn.execute(
-                "SELECT payload FROM executors WHERE id = ?",
-                (executor_id,),
-            ).fetchone()
-        if row is None:
-            return None
-        return Executor.model_validate_json(row["payload"])
 
     def save_notification(self, event: NotificationEvent) -> NotificationEvent:
         """保存通知事件。"""

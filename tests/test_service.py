@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 
 from xushi.config import Settings
-from xushi.models import FollowUpPolicy, RunCallback, Schedule, TaskCreate
+from xushi.models import Executor, FollowUpPolicy, RunCallback, Schedule, TaskCreate
 from xushi.service import XushiService
 
 
@@ -49,6 +49,69 @@ def test_reminder_with_missing_executor_records_failure(tmp_path) -> None:
 
     assert run.status == "failed"
     assert run.error == "executor not found"
+
+
+def test_manual_trigger_uses_executor_from_settings(tmp_path, monkeypatch) -> None:
+    requests: list[tuple[str, str]] = []
+
+    class FakeResponse:
+        status = 200
+
+        def __enter__(self) -> "FakeResponse":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b'{"ok": true}'
+
+    def fake_urlopen(req, timeout: int, context=None):
+        requests.append((req.full_url, req.headers["Authorization"]))
+        return FakeResponse()
+
+    monkeypatch.setattr("xushi.executors.request.urlopen", fake_urlopen)
+    service = XushiService(
+        Settings(
+            database_path=tmp_path / "xushi.db",
+            api_token="test-token",
+            executors=(
+                Executor(
+                    id="custom-openclaw",
+                    kind="openclaw",
+                    name="Custom OpenClaw",
+                    config={
+                        "mode": "hooks_agent",
+                        "webhook_url": "http://127.0.0.1:18789/hooks/agent",
+                        "token": "secret-token",
+                    },
+                ),
+            ),
+        )
+    )
+    task = service.create_task(
+        TaskCreate(
+            title="喝水",
+            schedule=Schedule(
+                kind="one_shot",
+                run_at=datetime(2026, 5, 9, 12, 0, tzinfo=UTC),
+                timezone="UTC",
+            ),
+            action={
+                "type": "reminder",
+                "executor_id": "custom-openclaw",
+                "payload": {"message": "该喝水了"},
+            },
+        )
+    )
+
+    run = service.trigger_task(task.id, now=datetime(2026, 5, 9, 12, 0, tzinfo=UTC))
+
+    assert run.status == "succeeded"
+    assert run.result["executor"] == "custom-openclaw"
+    assert requests == [
+        ("http://127.0.0.1:18789/hooks/agent", "Bearer secret-token"),
+    ]
 
 
 def test_create_task_reuses_idempotency_key(tmp_path) -> None:

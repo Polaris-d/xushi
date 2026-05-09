@@ -9,6 +9,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from xushi.bridges import DEFAULT_OPENCLAW_HOOKS_AGENT_URL
+from xushi.models import Executor
+
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8766
 DEFAULT_SCHEDULER_INTERVAL_SECONDS = 30
@@ -31,6 +34,49 @@ def load_config(config_path: Path | None = None) -> dict[str, Any]:
     if not resolved_path.exists():
         return {}
     return json.loads(resolved_path.read_text(encoding="utf-8"))
+
+
+def default_executors() -> tuple[Executor, ...]:
+    """返回默认 executor 配置。
+
+    OpenClaw 是 v1 唯一实际实现的 agent 投递 executor；Hermes 和通用
+    webhook 先保留配置位置，等待后续实现。
+    """
+    return (
+        Executor(
+            id="openclaw",
+            kind="openclaw",
+            name="OpenClaw",
+            config={
+                "mode": "hooks_agent",
+                "webhook_url": DEFAULT_OPENCLAW_HOOKS_AGENT_URL,
+                "token_env": "OPENCLAW_HOOKS_TOKEN",
+                "deliver": True,
+                "timeout_seconds": 120,
+            },
+        ),
+        Executor(
+            id="hermes",
+            kind="hermes",
+            name="Hermes",
+            config={"mode": "template"},
+            enabled=False,
+        ),
+        Executor(
+            id="webhook",
+            kind="webhook",
+            name="Webhook",
+            config={"mode": "template"},
+            enabled=False,
+        ),
+    )
+
+
+def _load_executors(file_config: dict[str, Any]) -> tuple[Executor, ...]:
+    """从配置文件读取 executor 列表。"""
+    if "executors" not in file_config:
+        return default_executors()
+    return tuple(Executor.model_validate(executor) for executor in file_config["executors"])
 
 
 def write_initial_config(
@@ -66,6 +112,7 @@ def write_initial_config(
         "host": DEFAULT_HOST,
         "port": DEFAULT_PORT,
         "scheduler_interval_seconds": DEFAULT_SCHEDULER_INTERVAL_SECONDS,
+        "executors": [executor.model_dump(mode="json") for executor in default_executors()],
     }
     resolved_config_path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
@@ -83,6 +130,7 @@ class Settings:
     host: str = DEFAULT_HOST
     port: int = DEFAULT_PORT
     scheduler_interval_seconds: int = DEFAULT_SCHEDULER_INTERVAL_SECONDS
+    executors: tuple[Executor, ...] = field(default_factory=default_executors)
 
     @classmethod
     def from_env(cls, config_path: Path | None = None) -> Settings:
@@ -109,4 +157,5 @@ class Settings:
                     ),
                 )
             ),
+            executors=_load_executors(file_config),
         )

@@ -13,7 +13,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from xushi.config import Settings
-from xushi.models import Executor, RunCallback, TaskCreate, TaskPatch
+from xushi.models import RunCallback, TaskCreate, TaskPatch
 from xushi.runtime import run_scheduler_loop
 from xushi.service import XushiService
 
@@ -160,11 +160,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return api_response(
             [executor.model_dump(mode="json") for executor in service.list_executors()]
         )
-
-    @app.post("/api/v1/executors", status_code=201, dependencies=[Depends(require_token)])
-    def save_executor(executor: Executor, response: Response) -> dict[str, Any]:
-        response.status_code = status.HTTP_201_CREATED
-        return api_response(service.save_executor(executor).model_dump(mode="json"), "created", 201)
 
     @app.get("/", response_class=HTMLResponse)
     def web_console() -> str:
