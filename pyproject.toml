@@ -1,6 +1,6 @@
 [project]
 name = "xushi"
-version = "0.1.5"
+version = "0.1.6"
 description = "AI 原生的本地化日程管理与 agent 调度底座。"
 readme = "README.md"
 requires-python = ">=3.12"

@@ -75,7 +75,7 @@ Optional environment variables:
 
 | Variable | Purpose |
 | --- | --- |
-| `XUSHI_VERSION` | Release tag to install, for example `v0.1.5`; default is latest |
+| `XUSHI_VERSION` | Release tag to install, for example `v0.1.6`; default is latest |
 | `XUSHI_BIN_DIR` | Binary install directory; default is `~/.xushi/bin` |
 | `XUSHI_REPO_SLUG` | GitHub repository slug; default is `Polaris-d/xushi` |
 | `XUSHI_INSTALL_AGENT_PLUGINS` | Optional comma-separated auxiliary plugin targets; currently supports `openclaw` |
@@ -434,7 +434,7 @@ xushi upgrade apply --yes
 For a specific release tag:
 
 ```bash
-xushi upgrade apply --version v0.1.5 --yes
+xushi upgrade apply --version v0.1.6 --yes
 ```
 
 The upgrade command creates a backup of the local config and SQLite database before replacing global command binaries from GitHub Releases. If the upgrade fails or the user wants to restore data, run:
