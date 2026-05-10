@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from xushi.bridges import DEFAULT_OPENCLAW_HOOKS_AGENT_URL
-from xushi.models import Executor
+from xushi.models import Executor, QuietPolicy
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 18766
@@ -118,6 +118,7 @@ def write_initial_config(
         "host": DEFAULT_HOST,
         "port": DEFAULT_PORT,
         "scheduler_interval_seconds": DEFAULT_SCHEDULER_INTERVAL_SECONDS,
+        "quiet_policy": QuietPolicy().model_dump(mode="json"),
         "executors": [executor.model_dump(mode="json") for executor in default_executors()],
     }
     resolved_config_path.write_text(
@@ -136,6 +137,7 @@ class Settings:
     host: str = DEFAULT_HOST
     port: int = DEFAULT_PORT
     scheduler_interval_seconds: int = DEFAULT_SCHEDULER_INTERVAL_SECONDS
+    quiet_policy: QuietPolicy = field(default_factory=QuietPolicy)
     executors: tuple[Executor, ...] = field(default_factory=default_executors)
 
     @classmethod
@@ -163,5 +165,6 @@ class Settings:
                     ),
                 )
             ),
+            quiet_policy=QuietPolicy.model_validate(file_config.get("quiet_policy", {})),
             executors=_load_executors(file_config),
         )

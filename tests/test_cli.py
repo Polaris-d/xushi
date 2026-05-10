@@ -35,6 +35,30 @@ def test_cli_lists_notifications(tmp_path, monkeypatch) -> None:
     assert "喝水" in result.output
 
 
+def test_cli_lists_deliveries(tmp_path, monkeypatch) -> None:
+    database_path = tmp_path / "xushi.db"
+    monkeypatch.setenv("XUSHI_DATABASE_PATH", str(database_path))
+    service = XushiService(Settings(database_path=database_path, api_token="test-token"))
+    task = service.create_task(
+        TaskCreate(
+            title="喝水",
+            schedule=Schedule(
+                kind="one_shot",
+                run_at=datetime(2026, 5, 9, 12, 0, tzinfo=UTC),
+                timezone="UTC",
+            ),
+            action={"type": "reminder", "payload": {"message": "喝水"}},
+        )
+    )
+    service.trigger_task(task.id, now=datetime(2026, 5, 9, 12, 0, tzinfo=UTC))
+
+    result = CliRunner().invoke(app, ["deliveries"])
+
+    assert result.exit_code == 0
+    assert "delivered" in result.output
+    assert task.id in result.output
+
+
 def test_cli_init_writes_config_without_printing_full_token(tmp_path) -> None:
     config_path = tmp_path / "config.json"
     state_dir = tmp_path / "state"

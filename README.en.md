@@ -100,6 +100,8 @@ uv run xushi init --show-token
 uv run xushi-daemon
 ```
 
+Completion-based habits should keep `anchor: "completion"`. Night-time behavior belongs to the delivery layer: configure a global `quiet_policy` with `behavior: "delay"` and digest aggregation, then let normal tasks inherit it. Use task-level `quiet_policy: {"mode": "bypass"}` only for explicit night reminders such as early flights.
+
 ## Agent Executors
 
 Executors are local config, not runtime data. Put them in the `executors` array in `~/.xushi/config.json`, then restart `xushi-daemon`.
@@ -169,9 +171,9 @@ xushi never upgrades silently. Run upgrades explicitly:
 
 ```powershell
 xushi upgrade status
-xushi upgrade check --version v0.1.4
+xushi upgrade check --version v0.1.5
 xushi upgrade backup
-xushi upgrade apply --version v0.1.4 --yes
+xushi upgrade apply --version v0.1.5 --yes
 xushi upgrade rollback
 ```
 

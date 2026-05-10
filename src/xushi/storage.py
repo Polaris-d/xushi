@@ -8,7 +8,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from xushi.models import Run, Task
+from xushi.models import Delivery, Run, Task
 from xushi.notifications import NotificationEvent
 
 
@@ -60,6 +60,18 @@ class SQLiteStore:
                     id TEXT PRIMARY KEY,
                     payload TEXT NOT NULL,
                     created_at TEXT NOT NULL,
+                    status TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS deliveries (
+                    id TEXT PRIMARY KEY,
+                    run_id TEXT,
+                    task_id TEXT,
+                    payload TEXT NOT NULL,
+                    deliver_at TEXT NOT NULL,
                     status TEXT NOT NULL
                 )
                 """
@@ -149,6 +161,48 @@ class SQLiteStore:
         if row is None:
             return None
         return Run.model_validate_json(row["payload"])
+
+    def save_delivery(self, delivery: Delivery) -> Delivery:
+        """保存投递计划。"""
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO deliveries (id, run_id, task_id, payload, deliver_at, status)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    payload = excluded.payload,
+                    run_id = excluded.run_id,
+                    task_id = excluded.task_id,
+                    deliver_at = excluded.deliver_at,
+                    status = excluded.status
+                """,
+                (
+                    delivery.id,
+                    delivery.run_id,
+                    delivery.task_id,
+                    delivery.model_dump_json(),
+                    delivery.deliver_at.isoformat(),
+                    delivery.status,
+                ),
+            )
+        return delivery
+
+    def get_delivery(self, delivery_id: str) -> Delivery | None:
+        """按 ID 获取投递计划。"""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT payload FROM deliveries WHERE id = ?",
+                (delivery_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return Delivery.model_validate_json(row["payload"])
+
+    def list_deliveries(self) -> list[Delivery]:
+        """返回所有投递计划。"""
+        with self._connect() as conn:
+            rows = conn.execute("SELECT payload FROM deliveries ORDER BY deliver_at ASC").fetchall()
+        return [Delivery.model_validate_json(row["payload"]) for row in rows]
 
     def save_notification(self, event: NotificationEvent) -> NotificationEvent:
         """保存通知事件。"""

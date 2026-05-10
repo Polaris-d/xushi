@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from xushi.models import Executor, Schedule, TaskCreate
+from xushi.models import Executor, QuietPolicy, QuietWindow, Schedule, TaskCreate
 
 
 def test_schedule_requires_timezone() -> None:
@@ -16,6 +16,26 @@ def test_schedule_requires_timezone() -> None:
 def test_recurring_schedule_requires_rrule() -> None:
     with pytest.raises(ValidationError):
         Schedule(kind="recurring", run_at=datetime(2026, 5, 9, 12, 0, tzinfo=UTC), timezone="UTC")
+
+
+def test_quiet_policy_accepts_multiple_windows() -> None:
+    policy = QuietPolicy(
+        enabled=True,
+        timezone="Asia/Shanghai",
+        windows=[
+            QuietWindow(start="12:30", end="14:00", days="workdays"),
+            QuietWindow(start="22:30", end="08:00"),
+        ],
+    )
+
+    assert len(policy.windows) == 2
+    assert policy.windows[0].start_minutes() == 750
+    assert policy.windows[1].end_minutes() == 480
+
+
+def test_quiet_window_rejects_same_start_and_end() -> None:
+    with pytest.raises(ValidationError):
+        QuietWindow(start="08:00", end=8)
 
 
 def test_task_create_accepts_agent_action_payload() -> None:

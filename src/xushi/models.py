@@ -35,10 +35,24 @@ class TaskStatus(StrEnum):
 class RunStatus(StrEnum):
     """运行记录状态。"""
 
+    PENDING_DELIVERY = "pending_delivery"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     PENDING_CONFIRMATION = "pending_confirmation"
     FOLLOWING_UP = "following_up"
+    CANCELLED = "cancelled"
+
+
+class DeliveryStatus(StrEnum):
+    """投递事件状态。"""
+
+    PENDING = "pending"
+    DELAYED = "delayed"
+    DIGESTED = "digested"
+    DELIVERED = "delivered"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+    SILENCED = "silenced"
     CANCELLED = "cancelled"
 
 
@@ -83,6 +97,98 @@ class Schedule(BaseModel):
         return self
 
 
+class QuietAggregation(BaseModel):
+    """免打扰延迟投递聚合策略。"""
+
+    enabled: bool = True
+    mode: Literal["digest"] = "digest"
+    max_items: int = Field(default=10, ge=1, le=50)
+
+
+class QuietWindow(BaseModel):
+    """免打扰时间窗口。"""
+
+    start: int | str
+    end: int | str
+    days: Literal["everyday", "workdays", "weekends", "weekdays"] = "everyday"
+    calendar: Literal["CN"] = "CN"
+
+    @model_validator(mode="after")
+    def validate_window(self) -> QuietWindow:
+        """校验免打扰窗口端点。"""
+        if self.start_minutes() == self.end_minutes():
+            raise ValueError("quiet window endpoints must be different")
+        return self
+
+    def start_minutes(self) -> int:
+        """返回开始端点的当天分钟数。"""
+        return parse_clock_minutes(self.start)
+
+    def end_minutes(self) -> int:
+        """返回结束端点的当天分钟数。"""
+        return parse_clock_minutes(self.end)
+
+
+class QuietPolicy(BaseModel):
+    """全局免打扰策略。"""
+
+    enabled: bool = False
+    timezone: str = "Asia/Shanghai"
+    windows: list[QuietWindow] = Field(default_factory=list)
+    behavior: Literal["delay", "skip", "bypass", "silent"] = "delay"
+    aggregation: QuietAggregation = Field(default_factory=QuietAggregation)
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value: str) -> str:
+        """校验 IANA 时区标识。"""
+        get_tzinfo(value)
+        return value
+
+
+class TaskQuietPolicy(BaseModel):
+    """任务级免打扰策略。"""
+
+    mode: Literal["inherit", "override", "bypass", "skip", "silent"] = "inherit"
+    timezone: str | None = None
+    windows: list[QuietWindow] = Field(default_factory=list)
+    behavior: Literal["delay", "skip", "bypass", "silent"] | None = None
+    aggregation: QuietAggregation | None = None
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value: str | None) -> str | None:
+        """校验 IANA 时区标识。"""
+        if value is not None:
+            get_tzinfo(value)
+        return value
+
+
+def parse_clock_minutes(value: int | str) -> int:
+    """解析小时或 HH:MM 为当天分钟数。"""
+    if isinstance(value, int):
+        if value < 0 or value > 23:
+            raise ValueError(f"invalid hour: {value}")
+        return value * 60
+
+    raw = value.strip()
+    if not raw:
+        raise ValueError("empty hour value")
+    if ":" in raw:
+        hour_text, minute_text = raw.split(":", maxsplit=1)
+    else:
+        hour_text, minute_text = raw, "0"
+    if not hour_text.isdigit() or not minute_text.isdigit():
+        raise ValueError(f"invalid hour value: {value}")
+    hour = int(hour_text)
+    minute = int(minute_text)
+    if hour == 24 and minute == 0:
+        return 24 * 60
+    if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+        raise ValueError(f"invalid hour value: {value}")
+    return hour * 60 + minute
+
+
 class FollowUpPolicy(BaseModel):
     """未完成任务跟进策略。"""
 
@@ -110,6 +216,7 @@ class TaskCreate(BaseModel):
     schedule: Schedule
     action: Action
     follow_up_policy: FollowUpPolicy = Field(default_factory=FollowUpPolicy)
+    quiet_policy: TaskQuietPolicy = Field(default_factory=TaskQuietPolicy)
     tags: list[str] = Field(default_factory=list)
     created_by: Literal["user", "agent", "api"] = "api"
     idempotency_key: str | None = None
@@ -124,6 +231,7 @@ class TaskCreate(BaseModel):
             schedule=self.schedule,
             action=self.action,
             follow_up_policy=self.follow_up_policy,
+            quiet_policy=self.quiet_policy,
             tags=self.tags,
             created_by=self.created_by,
             idempotency_key=self.idempotency_key,
@@ -171,6 +279,28 @@ class Run(BaseModel):
     error: str | None = None
     follow_up_attempts: int = 0
     confirmed_at: datetime | None = None
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
+class Delivery(BaseModel):
+    """一次到期事件的投递计划与结果。"""
+
+    id: str
+    run_id: str | None = None
+    task_id: str | None = None
+    kind: str = "reminder"
+    action: Action
+    due_at: datetime
+    deliver_at: datetime
+    status: DeliveryStatus
+    reason: str | None = None
+    grouped_delivery_id: str | None = None
+    digest_run_ids: list[str] = Field(default_factory=list)
+    result: dict[str, Any] = Field(default_factory=dict)
+    error: str | None = None
+    created_at: datetime
+    updated_at: datetime
 
     model_config = ConfigDict(use_enum_values=True)
 
