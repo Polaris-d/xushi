@@ -4,20 +4,27 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import platform
 import shutil
 import socket
 import sqlite3
+import stat
 import subprocess
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib import request as urlrequest
 
 from xushi import __version__
 
 MANIFEST_FILE = "manifest.json"
 HISTORY_FILE = "upgrade_history.jsonl"
+DEFAULT_REPO_SLUG = "Polaris-d/xushi"
+BINARY_NAMES = ("xushi", "xushi-daemon")
 
 
 class UpgradeError(RuntimeError):
@@ -64,14 +71,24 @@ class UpgradeBackup:
 
 
 @dataclass(frozen=True)
-class CommandResult:
-    """外部命令执行结果。"""
+class DownloadedAsset:
+    """已下载安装的 release 资产。"""
 
-    command: list[str]
-    cwd: Path
-    returncode: int
-    stdout: str
-    stderr: str
+    name: str
+    url: str
+    path: Path
+    sha256: str
+    pending_replace: bool = False
+
+    def to_json(self) -> dict[str, Any]:
+        """转换为 JSON 可序列化结构。"""
+        return {
+            "name": self.name,
+            "url": self.url,
+            "path": str(self.path),
+            "sha256": self.sha256,
+            "pending_replace": self.pending_replace,
+        }
 
 
 @dataclass(frozen=True)
@@ -80,8 +97,8 @@ class UpgradeResult:
 
     status: str
     backup_id: str
-    target_version: str | None
-    commands: tuple[CommandResult, ...]
+    target_version: str
+    assets: tuple[DownloadedAsset, ...]
 
     def to_json(self) -> dict[str, Any]:
         """转换为 JSON 可序列化结构。"""
@@ -89,20 +106,12 @@ class UpgradeResult:
             "status": self.status,
             "backup_id": self.backup_id,
             "target_version": self.target_version,
-            "commands": [
-                {
-                    "command": command.command,
-                    "cwd": str(command.cwd),
-                    "returncode": command.returncode,
-                    "stdout": command.stdout,
-                    "stderr": command.stderr,
-                }
-                for command in self.commands
-            ],
+            "mode": "release_binary",
+            "assets": [asset.to_json() for asset in self.assets],
         }
 
 
-CommandRunner = Callable[[list[str], Path], CommandResult]
+ReleaseDownloader = Callable[[str, Path], None]
 
 
 class UpgradeManager:
@@ -117,7 +126,9 @@ class UpgradeManager:
         install_dir: Path,
         host: str = "127.0.0.1",
         port: int = 18766,
-        command_runner: CommandRunner | None = None,
+        repo_slug: str | None = None,
+        platform_tag: str | None = None,
+        downloader: ReleaseDownloader | None = None,
     ) -> None:
         self.config_path = config_path
         self.database_path = database_path
@@ -125,28 +136,44 @@ class UpgradeManager:
         self.install_dir = install_dir
         self.host = host
         self.port = port
-        self.command_runner = command_runner or run_command
+        self.repo_slug = repo_slug or os.environ.get("XUSHI_REPO_SLUG", DEFAULT_REPO_SLUG)
+        self.platform_tag = platform_tag or normalize_platform_tag()
+        self.downloader = downloader or download_file
 
     def status(self) -> dict[str, Any]:
         """返回本机升级状态。"""
         return {
             "current_version": __version__,
+            "install_mode": "release_binary",
             "install_dir": str(self.install_dir),
+            "platform_tag": self.platform_tag,
+            "repo_slug": self.repo_slug,
             "config_path": str(self.config_path),
             "database_path": str(self.database_path),
             "backup_dir": str(self._backup_root()),
+            "commands": [str(self._target_path(name)) for name in BINARY_NAMES],
             "backups": [backup.to_json() for backup in self.list_backups()],
         }
 
     def check(self, target_version: str | None = None) -> dict[str, Any]:
         """检查指定目标版本是否需要升级。"""
+        resolved_version = target_version or "latest"
+        update_available = None
+        if target_version and target_version != "latest":
+            update_available = _version_key(target_version) > _version_key(__version__)
         return {
             "current_version": __version__,
-            "target_version": target_version,
-            "update_available": bool(
-                target_version and _version_key(target_version) > _version_key(__version__)
-            ),
-            "mode": "manual_cli",
+            "target_version": resolved_version,
+            "update_available": update_available,
+            "mode": "release_binary",
+            "asset_urls": [
+                release_download_url(
+                    repo_slug=self.repo_slug,
+                    version=resolved_version,
+                    asset_name=release_binary_name(name, self.platform_tag),
+                )
+                for name in BINARY_NAMES
+            ],
         }
 
     def create_backup(self, now: datetime | None = None) -> UpgradeBackup:
@@ -230,32 +257,21 @@ class UpgradeManager:
         allow_dirty: bool = False,
         allow_running_daemon: bool = False,
     ) -> UpgradeResult:
-        """执行 git 安装形态的手动升级。"""
-        if not (self.install_dir / ".git").exists():
-            raise UpgradeError(f"当前仅支持 git 安装目录升级: {self.install_dir}")
+        """执行 release 二进制安装形态的手动升级。"""
+        _ = allow_dirty
         if not allow_running_daemon and not self._port_available():
             raise UpgradeError("daemon 可能正在运行; 请先停止 daemon 后再升级")
 
-        commands: list[CommandResult] = []
-        if not allow_dirty:
-            status_result = self._run(["git", "status", "--porcelain"])
-            commands.append(status_result)
-            if status_result.stdout.strip():
-                raise UpgradeError("安装目录存在未提交改动, 请先处理后再升级")
-
-        old_ref = self._run(["git", "rev-parse", "HEAD"])
-        commands.append(old_ref)
+        resolved_version = target_version or "latest"
         backup = self.create_backup()
-
         try:
-            for command in self._upgrade_commands(target_version):
-                commands.append(self._run(command))
+            assets = tuple(self._download_release_assets(resolved_version))
         except UpgradeError:
             self._append_history(
                 {
                     "operation": "apply",
                     "backup_id": backup.id,
-                    "target_version": target_version,
+                    "target_version": resolved_version,
                     "created_at": datetime.now(tz=UTC).isoformat(),
                     "status": "failed",
                 }
@@ -265,28 +281,60 @@ class UpgradeManager:
         result = UpgradeResult(
             status="succeeded",
             backup_id=backup.id,
-            target_version=target_version,
-            commands=tuple(commands),
+            target_version=resolved_version,
+            assets=assets,
         )
         self._append_history({"operation": "apply", **result.to_json()})
         return result
 
-    def _upgrade_commands(self, target_version: str | None) -> list[list[str]]:
-        commands = [["git", "fetch", "--tags", "--prune"]]
-        if target_version:
-            commands.append(["git", "checkout", "--detach", target_version])
-        else:
-            commands.append(["git", "pull", "--ff-only"])
-        commands.append(["uv", "sync"])
-        return commands
-
-    def _run(self, command: list[str]) -> CommandResult:
-        result = self.command_runner(command, self.install_dir)
-        if result.returncode != 0:
-            raise UpgradeError(
-                f"命令执行失败: {' '.join(command)}\n{result.stderr or result.stdout}"
+    def _download_release_assets(self, version: str) -> list[DownloadedAsset]:
+        self.install_dir.mkdir(parents=True, exist_ok=True)
+        assets: list[DownloadedAsset] = []
+        for name in BINARY_NAMES:
+            asset_name = release_binary_name(name, self.platform_tag)
+            url = release_download_url(
+                repo_slug=self.repo_slug,
+                version=version,
+                asset_name=asset_name,
             )
-        return result
+            target = self._target_path(name)
+            temp = target.with_name(f"{target.name}.download")
+            if temp.exists():
+                temp.unlink()
+            try:
+                self.downloader(url, temp)
+            except OSError as exc:
+                raise UpgradeError(f"下载 release 资产失败: {url}\n{exc}") from exc
+            _make_executable(temp)
+            pending_replace = self._replace_binary(temp, target)
+            checksum_path = temp if pending_replace else target
+            assets.append(
+                DownloadedAsset(
+                    name=asset_name,
+                    url=url,
+                    path=target,
+                    sha256=_sha256(checksum_path),
+                    pending_replace=pending_replace,
+                )
+            )
+        return assets
+
+    def _target_path(self, name: str) -> Path:
+        return self.install_dir / local_binary_name(name, self.platform_tag)
+
+    def _replace_binary(self, temp: Path, target: Path) -> bool:
+        if _is_current_windows_executable(target):
+            _schedule_windows_self_replace(temp, target)
+            return True
+        try:
+            if target.exists():
+                target.unlink()
+            temp.replace(target)
+        except OSError as exc:
+            raise UpgradeError(
+                f"无法替换全局命令 {target}; 请确认相关进程已退出后重试"
+            ) from exc
+        return False
 
     def _backup_root(self) -> Path:
         return self.state_dir / "backups"
@@ -336,22 +384,107 @@ class UpgradeManager:
             file.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
 
-def run_command(command: list[str], cwd: Path) -> CommandResult:
-    """执行外部命令。"""
-    completed = subprocess.run(
-        command,
-        cwd=cwd,
-        check=False,
-        capture_output=True,
-        text=True,
+def default_bin_dir() -> Path:
+    """返回默认全局命令安装目录。"""
+    configured = os.environ.get("XUSHI_BIN_DIR") or os.environ.get("XUSHI_INSTALL_DIR")
+    return Path(configured) if configured else Path.home() / ".xushi" / "bin"
+
+
+def normalize_platform_tag(system: str | None = None, machine: str | None = None) -> str:
+    """生成与 GitHub Release 二进制资产一致的平台标签。"""
+    raw_system = (system or platform.system()).lower()
+    raw_machine = (machine or platform.machine()).lower()
+    os_name = {
+        "darwin": "macos",
+        "windows": "windows",
+        "linux": "linux",
+    }.get(raw_system)
+    arch_name = {
+        "amd64": "x64",
+        "x86_64": "x64",
+        "arm64": "arm64",
+        "aarch64": "arm64",
+    }.get(raw_machine)
+    if os_name is None:
+        raise UpgradeError(f"不支持的操作系统: {raw_system}")
+    if arch_name is None:
+        raise UpgradeError(f"不支持的 CPU 架构: {raw_machine}")
+    return f"{os_name}-{arch_name}"
+
+
+def release_binary_name(binary_name: str, platform_tag: str | None = None) -> str:
+    """返回 release 中的二进制资产名称。"""
+    resolved_tag = platform_tag or normalize_platform_tag()
+    suffix = ".exe" if resolved_tag.startswith("windows-") else ""
+    return f"{binary_name}-{resolved_tag}{suffix}"
+
+
+def local_binary_name(binary_name: str, platform_tag: str | None = None) -> str:
+    """返回写入本地 bin 目录后的全局命令文件名。"""
+    resolved_tag = platform_tag or normalize_platform_tag()
+    suffix = ".exe" if resolved_tag.startswith("windows-") else ""
+    return f"{binary_name}{suffix}"
+
+
+def release_download_url(*, repo_slug: str, version: str, asset_name: str) -> str:
+    """返回 GitHub Release 资产下载 URL。"""
+    if version == "latest":
+        return f"https://github.com/{repo_slug}/releases/latest/download/{asset_name}"
+    return f"https://github.com/{repo_slug}/releases/download/{version}/{asset_name}"
+
+
+def download_file(url: str, target: Path) -> None:
+    """下载 URL 到本地文件。"""
+    request = urlrequest.Request(url, headers={"user-agent": f"xushi/{__version__}"})
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with urlrequest.urlopen(request, timeout=60) as response, target.open("wb") as file:
+        shutil.copyfileobj(response, file)
+
+
+def _is_current_windows_executable(path: Path) -> bool:
+    if os.name != "nt":
+        return False
+    try:
+        return path.resolve() == Path(sys.executable).resolve()
+    except OSError:
+        return False
+
+
+def _schedule_windows_self_replace(temp: Path, target: Path) -> None:
+    script = target.with_name(f"{target.name}.replace.ps1")
+    script.write_text(
+        "\n".join(
+            [
+                '$ErrorActionPreference = "Stop"',
+                f"Wait-Process -Id {os.getpid()} -ErrorAction SilentlyContinue",
+                f"Move-Item -Force -LiteralPath '{_ps_quote(temp)}' "
+                f"-Destination '{_ps_quote(target)}'",
+                "Remove-Item -Force -LiteralPath $MyInvocation.MyCommand.Path",
+                "",
+            ]
+        ),
+        encoding="utf-8",
     )
-    return CommandResult(
-        command=command,
-        cwd=cwd,
-        returncode=completed.returncode,
-        stdout=completed.stdout,
-        stderr=completed.stderr,
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    subprocess.Popen(
+        [
+            "powershell",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-WindowStyle",
+            "Hidden",
+            "-File",
+            str(script),
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=creationflags,
     )
+
+
+def _ps_quote(path: Path) -> str:
+    return str(path).replace("'", "''")
 
 
 def _load_backup_manifest(manifest_path: Path) -> UpgradeBackup:
@@ -370,6 +503,12 @@ def _load_backup_manifest(manifest_path: Path) -> UpgradeBackup:
             for file in data["files"]
         ),
     )
+
+
+def _make_executable(path: Path) -> None:
+    if path.suffix == ".exe":
+        return
+    path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
 def _sha256(path: Path) -> str:

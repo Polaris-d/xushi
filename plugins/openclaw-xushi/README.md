@@ -86,4 +86,4 @@ OpenClaw `/hooks/agent` 的可选字段可在 executor config 中配置：`name`
 
 如果要固定由某个 agent 和飞书会话处理提醒，推荐在 OpenClaw hooks 配置里设置 `defaultSessionKey` 和 mapping。不要从序时传 `session_key`，除非 OpenClaw 已显式允许请求指定 session key。hooks token 也不要复用 gateway auth token。
 
-v1 只实现 OpenClaw `/hooks/agent` 投递。Hermes 和通用 webhook executor 暂时只是预留配置位，`command` executor 已移除。
+Hermes executor 已支持可配置 HTTP agent webhook；通用 webhook executor 暂时只是预留配置位，`command` executor 已移除。

@@ -40,11 +40,13 @@ def test_install_scripts_use_safe_defaults() -> None:
     sh = (ROOT / "scripts" / "install.sh").read_text(encoding="utf-8")
 
     assert "$env:USERPROFILE" in ps1
-    assert "XUSHI_INSTALL_DIR" in sh
-    assert "git pull --ff-only" in ps1
-    assert "git pull --ff-only" in sh
-    assert "uv sync" in ps1
-    assert "uv sync" in sh
+    assert "XUSHI_BIN_DIR" in sh
+    assert "releases/latest/download" in ps1
+    assert "releases/latest/download" in sh
+    assert "xushi-daemon" in ps1
+    assert "xushi-daemon" in sh
+    assert "Ensure-UserPath" in ps1
+    assert "ensure_path_config" in sh
 
 
 def test_openclaw_hooks_agent_uses_environment_configuration() -> None:
