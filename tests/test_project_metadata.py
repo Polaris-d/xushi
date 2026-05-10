@@ -74,6 +74,8 @@ def test_openclaw_plugin_does_not_mutate_executor_configuration() -> None:
     )
 
     assert "xushi_list_executors" in manifest
+    assert "xushi_list_runs" in manifest
+    assert "xushi_confirm_latest_run" in manifest
     assert "xushi_save_executor" not in manifest
     assert "xushi_save_executor" not in source
 
@@ -143,13 +145,21 @@ def test_xushi_skills_include_agent_task_type_guidance() -> None:
     questions = (
         ROOT / "skills" / "xushi-skills" / "references" / "clarification-questions.md"
     ).read_text(encoding="utf-8")
+    optimization_notes = (
+        ROOT / "skills" / "xushi-skills" / "references" / "optimization-notes.md"
+    ).read_text(encoding="utf-8")
 
     assert "name: xushi-skills" in skill
     assert "anchor: \"completion\"" in skill
+    assert "confirming the latest pending run" in skill
     assert "喝水" in task_types
     assert "起立" in task_types
     assert "deadline" in task_types
     assert "floating" in task_types
+    assert "requires_confirmation: true" in task_types
     assert "FREQ=HOURLY;INTERVAL=2" in schema_patterns
+    assert "Common wrong pattern" in schema_patterns
     assert "下一次提醒要按固定时间算" in questions
     assert "确认完成" in questions
+    assert "docs/xushi-feedback-notes.md" in optimization_notes
+    assert "Do not upload" in optimization_notes

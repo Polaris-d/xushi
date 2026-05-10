@@ -7,14 +7,14 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from typing import Annotated, Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Response, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from xushi import __version__
 from xushi.config import Settings
-from xushi.models import RunCallback, TaskCreate, TaskPatch
+from xushi.models import RunCallback, RunStatus, TaskCreate, TaskPatch
 from xushi.runtime import run_scheduler_loop
 from xushi.service import XushiService
 
@@ -133,8 +133,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return api_response(run.model_dump(mode="json"), "created", 201)
 
     @app.get("/api/v1/runs", dependencies=[Depends(require_token)])
-    def list_runs() -> dict[str, Any]:
-        return api_response([run.model_dump(mode="json") for run in service.list_runs()])
+    def list_runs(
+        task_id: str | None = None,
+        status_filter: Annotated[RunStatus | None, Query(alias="status")] = None,
+        active_only: bool = False,
+        limit: Annotated[int | None, Query(ge=1, le=500)] = None,
+    ) -> dict[str, Any]:
+        runs = service.list_runs(
+            task_id=task_id,
+            status=status_filter,
+            active_only=active_only,
+            limit=limit,
+        )
+        return api_response([run.model_dump(mode="json") for run in runs])
 
     @app.get("/api/v1/notifications", dependencies=[Depends(require_token)])
     def list_notifications() -> dict[str, Any]:
@@ -147,6 +158,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         run = service.confirm_run(run_id)
         if run is None:
             raise HTTPException(status_code=404, detail="run not found")
+        return api_response(run.model_dump(mode="json"))
+
+    @app.post("/api/v1/tasks/{task_id}/runs/confirm-latest", dependencies=[Depends(require_token)])
+    def confirm_latest_run(task_id: str) -> dict[str, Any]:
+        if service.get_task(task_id) is None:
+            raise HTTPException(status_code=404, detail="task not found")
+        run = service.confirm_latest_run(task_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail="pending run not found")
         return api_response(run.model_dump(mode="json"))
 
     @app.post("/api/v1/runs/{run_id}/callback", dependencies=[Depends(require_token)])

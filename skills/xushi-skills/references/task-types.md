@@ -14,6 +14,20 @@ Use this guide to map real user requests to xushi schedule kinds. The important 
 | Remind as soon as possible | `asap` | n/a | Optional |
 | Unspecific "someday / when free" item | `floating` | n/a | Not auto-triggered |
 
+## Health Habit Default
+
+For drinking water, standing up, stretching, eye rest, walking breaks, breathing breaks, and similar habits, default to `recurring` with `anchor: "completion"` and `requires_confirmation: true`.
+
+Use that default because these tasks are about elapsed time since the user actually completed the habit. If the user drinks water at 10:20, a two-hour interval should usually remind around 12:20, not at the next fixed calendar slot. If the user never confirms, xushi cannot know when to reset the interval.
+
+Only use `anchor: "calendar"` for these habits when the user clearly says they want fixed wall-clock reminders such as "每天 9 点、11 点、13 点提醒我喝水". When unclear, ask whether the next reminder should follow fixed time slots or restart after confirmation.
+
+Avoid these mistakes:
+
+- Do not model "每 2 小时喝水" as fixed calendar recurrence unless the user explicitly wants fixed slots.
+- Do not set `requires_confirmation: false` for habits whose next reminder depends on completion time.
+- Do not treat `max_attempts: 0` as unlimited follow-up. In current xushi versions it means no follow-up.
+
 ## Recurring With Completion Anchor
 
 Use `recurring` with `anchor: "completion"` when the next reminder should be calculated from the user's actual completion time. This is the best fit for interval habits where delays should shift the next occurrence.

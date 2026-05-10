@@ -118,6 +118,58 @@ def test_confirm_run_endpoint(tmp_path) -> None:
     assert confirm_response.json()["data"]["status"] == "succeeded"
 
 
+def test_confirm_latest_run_endpoint_and_run_filters(tmp_path) -> None:
+    settings = Settings(database_path=tmp_path / "xushi.db", api_token="test-token")
+    client = TestClient(create_app(settings))
+    create_response = client.post(
+        "/api/v1/tasks",
+        headers={"Authorization": "Bearer test-token"},
+        json={
+            "title": "喝水",
+            "schedule": {
+                "kind": "one_shot",
+                "run_at": datetime(2026, 5, 9, 12, 0, tzinfo=UTC).isoformat(),
+                "timezone": "UTC",
+            },
+            "action": {"type": "reminder", "payload": {"message": "喝水"}},
+            "follow_up_policy": {"requires_confirmation": True},
+        },
+    )
+    task_id = create_response.json()["data"]["id"]
+    first_run = client.post(
+        f"/api/v1/tasks/{task_id}/runs",
+        headers={"Authorization": "Bearer test-token"},
+    ).json()["data"]
+    second_run = client.post(
+        f"/api/v1/tasks/{task_id}/runs",
+        headers={"Authorization": "Bearer test-token"},
+    ).json()["data"]
+
+    confirm_response = client.post(
+        f"/api/v1/tasks/{task_id}/runs/confirm-latest",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    pending_response = client.get(
+        f"/api/v1/runs?task_id={task_id}&status=pending_confirmation",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    active_response = client.get(
+        f"/api/v1/runs?task_id={task_id}&active_only=true",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    limited_response = client.get(
+        "/api/v1/runs?limit=1",
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert confirm_response.status_code == 200
+    assert confirm_response.json()["data"]["id"] == second_run["id"]
+    assert confirm_response.json()["data"]["status"] == "succeeded"
+    assert [item["id"] for item in pending_response.json()["data"]] == [first_run["id"]]
+    assert [item["id"] for item in active_response.json()["data"]] == [first_run["id"]]
+    assert len(limited_response.json()["data"]) == 1
+
+
 def test_list_notifications_endpoint(tmp_path) -> None:
     settings = Settings(database_path=tmp_path / "xushi.db", api_token="test-token")
     client = TestClient(create_app(settings))

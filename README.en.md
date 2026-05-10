@@ -71,7 +71,7 @@ curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scr
 | Daily semantics | Supports fixed time, ASAP, windows, deadlines, recurrence, confirmation, and follow-up |
 | Delivery loop | Can deliver reminders to OpenClaw or Hermes through `executor_id` |
 | China calendar | Includes 2026 mainland China holidays and adjusted workdays |
-| Auditable | Every trigger creates a run record and supports callbacks |
+| Auditable | Every trigger creates a run record with filtered queries, latest-run confirmation, and callbacks |
 | Distributable | Ships wheels, PyInstaller binaries, Release assets, and an OpenClaw plugin |
 
 ## Quick Start
@@ -145,6 +145,18 @@ Hermes:
 
 Use environment variables for tokens. Do not store real secrets in task JSON, sample files, or commits.
 
+Useful run APIs for agents:
+
+```http
+GET /api/v1/runs?task_id=<task_id>&active_only=true&limit=10
+Authorization: Bearer <XUSHI_API_TOKEN>
+```
+
+```http
+POST /api/v1/tasks/{task_id}/runs/confirm-latest
+Authorization: Bearer <XUSHI_API_TOKEN>
+```
+
 ## Release And Upgrade
 
 Tagged releases publish Python packages, Windows/macOS/Linux single-file binaries, the OpenClaw plugin zip, checksums, and generated release notes.
@@ -153,9 +165,9 @@ xushi never upgrades silently. Run upgrades explicitly:
 
 ```powershell
 xushi upgrade status
-xushi upgrade check --version v0.1.2
+xushi upgrade check --version v0.1.3
 xushi upgrade backup
-xushi upgrade apply --version v0.1.2 --yes
+xushi upgrade apply --version v0.1.3 --yes
 xushi upgrade rollback
 ```
 

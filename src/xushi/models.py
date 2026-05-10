@@ -39,6 +39,7 @@ class RunStatus(StrEnum):
     FAILED = "failed"
     PENDING_CONFIRMATION = "pending_confirmation"
     FOLLOWING_UP = "following_up"
+    CANCELLED = "cancelled"
 
 
 class Schedule(BaseModel):

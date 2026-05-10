@@ -9,7 +9,9 @@
 - `xushi_list_tasks`：列出任务。
 - `xushi_get_task`：查看任务。
 - `xushi_trigger_task`：手动触发任务。
+- `xushi_list_runs`：列出运行记录，支持按任务、状态、活跃状态和条数过滤。
 - `xushi_confirm_run`：确认运行记录已完成，停止后续跟进。
+- `xushi_confirm_latest_run`：确认某任务最近一次待确认主运行记录。
 - `xushi_callback_run`：提交长任务最终结果。
 - `xushi_list_executors`：列出 `~/.xushi/config.json` 中的执行器配置。
 - `xushi_install_hint`：返回安装和启动指引。

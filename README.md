@@ -61,7 +61,7 @@ curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scr
 安装指定版本：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_VERSION=v0.1.2 sh
+curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_VERSION=v0.1.3 sh
 ```
 
 如果 agent 已经征得用户同意，也可以同时静默安装 `xushi-skills` 到 Codex，帮助 agent 正确选择喝水、起立活动、截止任务等任务类型：
@@ -86,7 +86,7 @@ irm https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/in
 | 日常语义 | 支持固定时间、尽快、时间窗、截止、循环、完成确认和未完成跟进 |
 | 投递闭环 | 可通过 `executor_id` 投递到 OpenClaw 或 Hermes；未配置时走本地系统通知 |
 | 中国日历 | 内置中国大陆 2026 年节假日和调休数据 |
-| 可审计 | 每次触发生成 run 记录，支持 callback 更新长任务最终状态 |
+| 可审计 | 每次触发生成 run 记录，支持过滤查询、最近确认和 callback 更新长任务最终状态 |
 | 可分发 | 提供 wheel、PyInstaller 二进制、Release 资产和 OpenClaw 插件 |
 
 ## 功能概览
@@ -94,13 +94,13 @@ irm https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/in
 | 能力 | 状态 | 说明 |
 | --- | --- | --- |
 | Python daemon | 可用 | FastAPI + SQLite，本地调度与 API |
-| CLI | 可用 | `init`、`doctor`、`create`、`list`、`trigger`、`tick`、`executors`、`notifications`、`upgrade` |
+| CLI | 可用 | `init`、`doctor`、`create`、`list`、`trigger`、`runs`、`confirm-latest`、`tick`、`executors`、`notifications`、`upgrade` |
 | Web 管理台 | 可用 | 访问 daemon 根路径查看任务、运行记录和通知 |
-| OpenClaw 插件 | 可用 | `plugins/openclaw-xushi`，提供创建、查询、触发、确认和 callback 工具 |
-| xushi-skills | 可用 | `skills/xushi-skills`，帮助 agent 判断任务类型、生成 schema 并适当追问 |
+| OpenClaw 插件 | 可用 | `plugins/openclaw-xushi`，提供创建、查询、触发、运行记录过滤、最近确认和 callback 工具 |
+| xushi-skills | 可用 | `skills/xushi-skills`，帮助 agent 判断任务类型、生成 schema、适当追问并记录本地优化反馈草稿 |
 | OpenClaw executor | 可用 | 投递到 OpenClaw `/hooks/agent` |
 | Hermes executor | 可用 | 可配置 HTTP agent webhook |
-| 跟进闭环 | 可用 | 未确认任务按策略重复提醒，确认后停止 |
+| 跟进闭环 | 可用 | 未确认任务按策略重复提醒，确认后取消同源待处理跟进 |
 | 中国工作日 | 可用 | 节假日、调休、工作日顺延、节日名称查询 |
 | 分发构建 | 可用 | wheel、PyInstaller、GitHub Actions Release |
 
@@ -247,6 +247,18 @@ xushi executors
 长任务完成后可回调：
 
 ```http
+GET /api/v1/runs?task_id=<task_id>&active_only=true&limit=10
+Authorization: Bearer <XUSHI_API_TOKEN>
+```
+
+当用户已经说明某个任务完成，且 agent 已知道 `task_id` 时，可以直接确认该任务最近一次待确认主运行记录：
+
+```http
+POST /api/v1/tasks/{task_id}/runs/confirm-latest
+Authorization: Bearer <XUSHI_API_TOKEN>
+```
+
+```http
 POST /api/v1/runs/{run_id}/callback
 Authorization: Bearer <XUSHI_API_TOKEN>
 Content-Type: application/json
@@ -274,8 +286,8 @@ uv build --wheel
 发布正式版本时创建并推送 SemVer tag：
 
 ```powershell
-git tag v0.1.2
-git push origin v0.1.2
+git tag v0.1.3
+git push origin v0.1.3
 ```
 
 `.github/workflows/release.yml` 会在 tag 上执行跨平台质量检查，生成 Python wheel/sdist、Windows/macOS/Linux 单文件二进制、OpenClaw 插件 zip，并在 GitHub Release 中附带 `SHA256SUMS.txt` 校验和与自动 release notes。
@@ -284,9 +296,9 @@ git push origin v0.1.2
 
 ```powershell
 xushi upgrade status
-xushi upgrade check --version v0.1.2
+xushi upgrade check --version v0.1.3
 xushi upgrade backup
-xushi upgrade apply --version v0.1.2 --yes
+xushi upgrade apply --version v0.1.3 --yes
 xushi upgrade rollback
 ```
 

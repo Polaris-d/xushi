@@ -27,7 +27,9 @@
       "xushi_list_tasks",
       "xushi_get_task",
       "xushi_trigger_task",
+      "xushi_list_runs",
       "xushi_confirm_run",
+      "xushi_confirm_latest_run",
       "xushi_callback_run",
       "xushi_list_executors",
       "xushi_install_hint"

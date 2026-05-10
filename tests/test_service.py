@@ -157,6 +157,138 @@ def test_confirm_run_marks_pending_run_succeeded(tmp_path) -> None:
     assert confirmed.confirmed_at == datetime(2026, 5, 9, 12, 3, tzinfo=UTC)
 
 
+def test_confirm_origin_run_cancels_existing_follow_ups(tmp_path) -> None:
+    service = XushiService(Settings(database_path=tmp_path / "xushi.db", api_token="test-token"))
+    task = service.create_task(
+        TaskCreate(
+            title="喝水",
+            schedule=Schedule(
+                kind="one_shot",
+                run_at=datetime(2026, 5, 9, 12, 0, tzinfo=UTC),
+                timezone="UTC",
+            ),
+            action={"type": "reminder", "payload": {"message": "喝水"}},
+            follow_up_policy=FollowUpPolicy(
+                requires_confirmation=True,
+                grace_period="PT5M",
+                interval="PT10M",
+                max_attempts=2,
+            ),
+        )
+    )
+    origin = service.trigger_task(task.id, now=datetime(2026, 5, 9, 12, 0, tzinfo=UTC))
+    service.process_follow_ups(now=datetime(2026, 5, 9, 12, 6, tzinfo=UTC))
+    service.process_follow_ups(now=datetime(2026, 5, 9, 12, 16, tzinfo=UTC))
+
+    service.confirm_run(origin.id, now=datetime(2026, 5, 9, 12, 20, tzinfo=UTC))
+
+    follow_ups = [run for run in service.list_runs(task_id=task.id) if run.origin_run_id]
+    assert {run.status for run in follow_ups} == {"cancelled"}
+    assert {run.result["cancelled_reason"] for run in follow_ups} == {"confirmed_by_origin"}
+    assert service.list_runs(task_id=task.id, active_only=True) == []
+
+
+def test_confirm_follow_up_cancels_siblings_and_confirms_origin(tmp_path) -> None:
+    service = XushiService(Settings(database_path=tmp_path / "xushi.db", api_token="test-token"))
+    task = service.create_task(
+        TaskCreate(
+            title="久坐提醒",
+            schedule=Schedule(
+                kind="one_shot",
+                run_at=datetime(2026, 5, 9, 12, 0, tzinfo=UTC),
+                timezone="UTC",
+            ),
+            action={"type": "reminder", "payload": {"message": "起来活动"}},
+            follow_up_policy=FollowUpPolicy(
+                requires_confirmation=True,
+                grace_period="PT5M",
+                interval="PT10M",
+                max_attempts=2,
+            ),
+        )
+    )
+    origin = service.trigger_task(task.id, now=datetime(2026, 5, 9, 12, 0, tzinfo=UTC))
+    first_follow_up = service.process_follow_ups(now=datetime(2026, 5, 9, 12, 6, tzinfo=UTC))[0]
+    second_follow_up = service.process_follow_ups(now=datetime(2026, 5, 9, 12, 16, tzinfo=UTC))[0]
+
+    confirmed = service.confirm_run(
+        first_follow_up.id,
+        now=datetime(2026, 5, 9, 12, 20, tzinfo=UTC),
+    )
+
+    stored_origin = service.get_run(origin.id)
+    stored_second_follow_up = service.get_run(second_follow_up.id)
+    assert confirmed is not None
+    assert confirmed.status == "succeeded"
+    assert stored_origin is not None
+    assert stored_origin.status == "succeeded"
+    assert stored_origin.result["confirmed_by_follow_up"] == first_follow_up.id
+    assert stored_second_follow_up is not None
+    assert stored_second_follow_up.status == "cancelled"
+
+
+def test_confirm_latest_run_confirms_most_recent_primary_run(tmp_path) -> None:
+    service = XushiService(Settings(database_path=tmp_path / "xushi.db", api_token="test-token"))
+    task = service.create_task(
+        TaskCreate(
+            title="喝水",
+            schedule=Schedule(
+                kind="one_shot",
+                run_at=datetime(2026, 5, 9, 12, 0, tzinfo=UTC),
+                timezone="UTC",
+            ),
+            action={"type": "reminder", "payload": {"message": "喝水"}},
+            follow_up_policy=FollowUpPolicy(requires_confirmation=True),
+        )
+    )
+    older = service.trigger_task(task.id, now=datetime(2026, 5, 9, 12, 0, tzinfo=UTC))
+    newer = service.trigger_task(task.id, now=datetime(2026, 5, 9, 13, 0, tzinfo=UTC))
+
+    confirmed = service.confirm_latest_run(
+        task.id,
+        now=datetime(2026, 5, 9, 13, 5, tzinfo=UTC),
+    )
+
+    stored_older = service.get_run(older.id)
+    assert confirmed is not None
+    assert confirmed.id == newer.id
+    assert confirmed.status == "succeeded"
+    assert stored_older is not None
+    assert stored_older.status == "pending_confirmation"
+
+
+def test_delete_task_cancels_open_runs(tmp_path) -> None:
+    service = XushiService(Settings(database_path=tmp_path / "xushi.db", api_token="test-token"))
+    task = service.create_task(
+        TaskCreate(
+            title="喝水",
+            schedule=Schedule(
+                kind="one_shot",
+                run_at=datetime(2026, 5, 9, 12, 0, tzinfo=UTC),
+                timezone="UTC",
+            ),
+            action={"type": "reminder", "payload": {"message": "喝水"}},
+            follow_up_policy=FollowUpPolicy(
+                requires_confirmation=True,
+                grace_period="PT5M",
+                max_attempts=1,
+            ),
+        )
+    )
+    origin = service.trigger_task(task.id, now=datetime(2026, 5, 9, 12, 0, tzinfo=UTC))
+    follow_up = service.process_follow_ups(now=datetime(2026, 5, 9, 12, 6, tzinfo=UTC))[0]
+
+    assert service.delete_task(task.id)
+
+    stored_origin = service.get_run(origin.id)
+    stored_follow_up = service.get_run(follow_up.id)
+    assert stored_origin is not None
+    assert stored_origin.status == "cancelled"
+    assert stored_follow_up is not None
+    assert stored_follow_up.status == "cancelled"
+    assert service.list_runs(task_id=task.id, active_only=True) == []
+
+
 def test_process_follow_ups_creates_follow_up_run_when_confirmation_is_late(tmp_path) -> None:
     service = XushiService(Settings(database_path=tmp_path / "xushi.db", api_token="test-token"))
     task = service.create_task(

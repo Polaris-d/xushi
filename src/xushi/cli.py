@@ -10,7 +10,7 @@ from typing import Annotated
 import typer
 
 from xushi.config import Settings, default_config_path, write_initial_config
-from xushi.models import Executor, TaskCreate
+from xushi.models import Executor, RunStatus, TaskCreate
 from xushi.service import XushiService
 from xushi.upgrade import UpgradeError, UpgradeManager, default_bin_dir
 
@@ -146,6 +146,48 @@ def list_tasks() -> None:
 def trigger(task_id: str) -> None:
     """手动触发任务。"""
     run = _service().trigger_task(task_id)
+    typer.echo(run.model_dump_json(indent=2))
+
+
+@app.command("runs")
+def list_runs(
+    task_id: Annotated[
+        str | None,
+        typer.Option(help="按任务 ID 过滤。"),
+    ] = None,
+    status: Annotated[
+        str | None,
+        typer.Option(help="按运行状态过滤, 如 pending_confirmation、following_up。"),
+    ] = None,
+    active_only: Annotated[bool, typer.Option(help="只显示仍需处理的运行记录。")] = False,
+    limit: Annotated[int | None, typer.Option(help="最多返回多少条记录。")] = None,
+) -> None:
+    """列出运行记录。"""
+    try:
+        run_status = RunStatus(status) if status else None
+    except ValueError as exc:
+        raise typer.BadParameter(f"无效运行状态: {status}") from exc
+    runs = [
+        run.model_dump(mode="json")
+        for run in _service().list_runs(
+            task_id=task_id,
+            status=run_status,
+            active_only=active_only,
+            limit=limit,
+        )
+    ]
+    _echo_json(runs)
+
+
+@app.command("confirm-latest")
+def confirm_latest(task_id: str) -> None:
+    """确认某任务最近一次待确认运行记录。"""
+    service = _service()
+    if service.get_task(task_id) is None:
+        raise typer.BadParameter("task not found")
+    run = service.confirm_latest_run(task_id)
+    if run is None:
+        raise typer.BadParameter("pending run not found")
     typer.echo(run.model_dump_json(indent=2))
 
 

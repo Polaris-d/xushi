@@ -14,6 +14,18 @@ function resolveConfig(api = {}) {
   };
 }
 
+function withQuery(path, query) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value === undefined || value === "") {
+      continue;
+    }
+    params.set(key, String(value));
+  }
+  const suffix = params.toString();
+  return suffix ? `${path}?${suffix}` : path;
+}
+
 async function xushiRequest(config, path, init = {}) {
   const token = process.env[config.tokenEnv];
   if (!token) {
@@ -106,6 +118,29 @@ export default definePluginEntry({
     });
 
     api.registerTool({
+      name: "xushi_list_runs",
+      description:
+        "列出 xushi 运行记录。可按 task_id、status、active_only 和 limit 过滤；agent 判断待确认事项时优先用 active_only=true。",
+      parameters: Type.Object({
+        task_id: Type.Optional(Type.String({ description: "按任务 ID 过滤。" })),
+        status: Type.Optional(
+          Type.Union([
+            Type.Literal("succeeded"),
+            Type.Literal("failed"),
+            Type.Literal("pending_confirmation"),
+            Type.Literal("following_up"),
+            Type.Literal("cancelled"),
+          ]),
+        ),
+        active_only: Type.Optional(Type.Boolean({ description: "只返回仍需处理的运行记录。" })),
+        limit: Type.Optional(Type.Number({ description: "最多返回多少条。" })),
+      }),
+      async execute(_id, params) {
+        return textResult(await xushiRequest(config, withQuery("/api/v1/runs", params)));
+      },
+    });
+
+    api.registerTool({
       name: "xushi_confirm_run",
       description: "确认一个 xushi run 已完成，用于停止后续跟进提醒。",
       parameters: Type.Object({
@@ -114,6 +149,21 @@ export default definePluginEntry({
       async execute(_id, params) {
         return textResult(
           await xushiRequest(config, `/api/v1/runs/${params.run_id}/confirm`, { method: "POST" }),
+        );
+      },
+    });
+
+    api.registerTool({
+      name: "xushi_confirm_latest_run",
+      description: "确认某个任务最近一次待确认的主运行记录。用户说已完成某个任务时，优先用它，避免先查 run_id。",
+      parameters: Type.Object({
+        task_id: Type.String({ description: "xushi 任务 ID。" }),
+      }),
+      async execute(_id, params) {
+        return textResult(
+          await xushiRequest(config, `/api/v1/tasks/${params.task_id}/runs/confirm-latest`, {
+            method: "POST",
+          }),
         );
       },
     });

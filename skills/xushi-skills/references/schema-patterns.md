@@ -40,6 +40,27 @@ Key points:
 - Use `anchor: "completion"` when the next reminder should reset after confirmation.
 - Keep `requires_confirmation: true`.
 - In current xushi versions, `max_attempts: 0` disables follow-up.
+- If the user says they completed the habit, confirm the latest pending run for that task. Do not only reply in chat.
+
+Common wrong pattern:
+
+```json
+{
+  "title": "喝水",
+  "schedule": {
+    "kind": "recurring",
+    "rrule": "FREQ=HOURLY;INTERVAL=2",
+    "timezone": "Asia/Shanghai",
+    "anchor": "calendar"
+  },
+  "follow_up_policy": {
+    "requires_confirmation": false,
+    "max_attempts": 0
+  }
+}
+```
+
+This is wrong for most "每 2 小时喝水" requests because the reminder does not reset after the user actually drinks water, and xushi receives no completion signal.
 
 ## Fixed Calendar Recurrence
 

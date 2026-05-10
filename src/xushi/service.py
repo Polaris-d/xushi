@@ -21,6 +21,8 @@ from xushi.notifications import NotificationDispatcher, NotificationEvent
 from xushi.scheduler import Scheduler
 from xushi.storage import SQLiteStore
 
+ACTIVE_RUN_STATUSES = {RunStatus.PENDING_CONFIRMATION.value, RunStatus.FOLLOWING_UP.value}
+
 
 class XushiService:
     """组合调度、执行器和持久化的应用服务。"""
@@ -69,9 +71,11 @@ class XushiService:
         task = self.get_task(task_id)
         if task is None:
             return False
+        archived_at = datetime.now(tz=UTC)
         task.status = TaskStatus.ARCHIVED
-        task.updated_at = datetime.now(tz=UTC)
+        task.updated_at = archived_at
         self.store.save_task(task)
+        self._cancel_open_runs_for_task(task_id, archived_at, "task_archived")
         return True
 
     def trigger_task(self, task_id: str, now: datetime | None = None) -> Run:
@@ -121,8 +125,36 @@ class XushiService:
                 origin.status = RunStatus.SUCCEEDED
                 origin.confirmed_at = confirmed_at
                 origin.finished_at = confirmed_at
+                origin.result = {**origin.result, "confirmed_by_follow_up": run.id}
                 self.store.save_run(origin)
+            self._cancel_follow_ups_for_origin(
+                run.origin_run_id,
+                confirmed_at,
+                "confirmed_by_follow_up",
+                exclude_run_id=run.id,
+            )
+        else:
+            self._cancel_follow_ups_for_origin(
+                run.id,
+                confirmed_at,
+                "confirmed_by_origin",
+            )
         return run
+
+    def confirm_latest_run(self, task_id: str, now: datetime | None = None) -> Run | None:
+        """确认某任务最近一次待确认主运行记录。"""
+        pending_runs = [
+            run
+            for run in self.store.list_runs()
+            if run.task_id == task_id
+            and run.origin_run_id is None
+            and run.confirmed_at is None
+            and run.status == RunStatus.PENDING_CONFIRMATION
+        ]
+        if not pending_runs:
+            return None
+        latest = max(pending_runs, key=lambda item: item.scheduled_for)
+        return self.confirm_run(latest.id, now)
 
     def callback_run(self, run_id: str, callback: RunCallback) -> Run | None:
         """根据外部执行器回调更新运行记录。"""
@@ -146,6 +178,18 @@ class XushiService:
                 origin.finished_at = finished_at
                 origin.result = {**origin.result, "confirmed_by_follow_up": run.id}
                 self.store.save_run(origin)
+            self._cancel_follow_ups_for_origin(
+                run.origin_run_id,
+                finished_at,
+                "confirmed_by_follow_up",
+                exclude_run_id=run.id,
+            )
+        elif callback.status == RunStatus.SUCCEEDED:
+            self._cancel_follow_ups_for_origin(
+                run.id,
+                finished_at,
+                "confirmed_by_origin",
+            )
         return run
 
     def tick(self, now: datetime | None = None) -> list[Run]:
@@ -175,10 +219,18 @@ class XushiService:
         runs = self.list_runs()
         by_origin = self._group_follow_ups_by_origin(runs)
         for run in runs:
-            if run.origin_run_id is not None or run.confirmed_at is not None:
+            if (
+                run.origin_run_id is not None
+                or run.confirmed_at is not None
+                or run.status != RunStatus.PENDING_CONFIRMATION
+            ):
                 continue
             task = self.get_task(run.task_id)
-            if task is None or not task.follow_up_policy.requires_confirmation:
+            if (
+                task is None
+                or task.status != TaskStatus.ACTIVE
+                or not task.follow_up_policy.requires_confirmation
+            ):
                 continue
             attempts = len(by_origin.get(run.id, []))
             next_at = self.scheduler.next_follow_up_at(
@@ -220,9 +272,33 @@ class XushiService:
             created.append(self.store.save_run(follow_up_run))
         return created
 
-    def list_runs(self) -> list[Run]:
+    def list_runs(
+        self,
+        *,
+        task_id: str | None = None,
+        status: RunStatus | str | None = None,
+        active_only: bool = False,
+        limit: int | None = None,
+    ) -> list[Run]:
         """列出运行历史。"""
-        return self.store.list_runs()
+        all_runs = self.store.list_runs()
+        runs = all_runs
+        if task_id is not None:
+            runs = [run for run in runs if run.task_id == task_id]
+        if status is not None:
+            run_status = RunStatus(status)
+            runs = [run for run in runs if run.status == run_status]
+        if active_only:
+            runs_by_id = {run.id: run for run in all_runs}
+            tasks_by_id = {task.id: task for task in self.list_tasks()}
+            runs = [
+                run
+                for run in runs
+                if self._is_active_run(run, runs_by_id=runs_by_id, tasks_by_id=tasks_by_id)
+            ]
+        if limit is not None:
+            runs = runs[:limit]
+        return runs
 
     def get_run(self, run_id: str) -> Run | None:
         """获取运行记录。"""
@@ -247,6 +323,63 @@ class XushiService:
                 continue
             grouped.setdefault(run.origin_run_id, []).append(run)
         return grouped
+
+    def _is_active_run(
+        self,
+        run: Run,
+        *,
+        runs_by_id: dict[str, Run],
+        tasks_by_id: dict[str, Task],
+    ) -> bool:
+        """判断运行记录是否仍需要 agent 处理。"""
+        if run.status not in ACTIVE_RUN_STATUSES or run.confirmed_at is not None:
+            return False
+        task = tasks_by_id.get(run.task_id)
+        if task is None or task.status != TaskStatus.ACTIVE:
+            return False
+        if run.origin_run_id is None:
+            return True
+        origin = runs_by_id.get(run.origin_run_id)
+        return (
+            origin is not None
+            and origin.status in ACTIVE_RUN_STATUSES
+            and origin.confirmed_at is None
+        )
+
+    def _cancel_follow_ups_for_origin(
+        self,
+        origin_run_id: str,
+        cancelled_at: datetime,
+        reason: str,
+        *,
+        exclude_run_id: str | None = None,
+    ) -> None:
+        """取消同一主运行记录下尚未完成的跟进记录。"""
+        for follow_up in self._group_follow_ups_by_origin(self.store.list_runs()).get(
+            origin_run_id,
+            [],
+        ):
+            if follow_up.id == exclude_run_id or follow_up.status not in ACTIVE_RUN_STATUSES:
+                continue
+            follow_up.status = RunStatus.CANCELLED
+            follow_up.finished_at = cancelled_at
+            follow_up.result = {**follow_up.result, "cancelled_reason": reason}
+            self.store.save_run(follow_up)
+
+    def _cancel_open_runs_for_task(
+        self,
+        task_id: str,
+        cancelled_at: datetime,
+        reason: str,
+    ) -> None:
+        """取消任务下仍在等待确认或跟进的运行记录。"""
+        for run in self.store.list_runs():
+            if run.task_id != task_id or run.status not in ACTIVE_RUN_STATUSES:
+                continue
+            run.status = RunStatus.CANCELLED
+            run.finished_at = cancelled_at
+            run.result = {**run.result, "cancelled_reason": reason}
+            self.store.save_run(run)
 
     def _last_primary_run_for_task(self, task_id: str) -> Run | None:
         primary_runs = [
