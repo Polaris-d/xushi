@@ -8,6 +8,7 @@ import ssl
 from typing import Any
 from urllib import error, request
 
+from xushi import __version__
 from xushi.bridges import (
     DEFAULT_HERMES_TOKEN_ENVS,
     DEFAULT_OPENCLAW_HOOKS_AGENT_URL,
@@ -192,7 +193,7 @@ class ExecutorRegistry:
         data = json.dumps(body, ensure_ascii=False).encode("utf-8")
         headers = {
             "content-type": "application/json",
-            "user-agent": "xushi/0.1.0",
+            "user-agent": f"xushi/{__version__}",
         }
         if token:
             headers["authorization"] = f"Bearer {token}"

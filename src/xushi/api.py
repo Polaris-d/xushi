@@ -12,6 +12,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 
+from xushi import __version__
 from xushi.config import Settings
 from xushi.models import RunCallback, TaskCreate, TaskPatch
 from xushi.runtime import run_scheduler_loop
@@ -51,7 +52,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             with suppress(asyncio.CancelledError):
                 await task
 
-    app = FastAPI(title="序时 xushi", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="序时 xushi", version=__version__, lifespan=lifespan)
 
     @app.exception_handler(HTTPException)
     async def http_exception_handler(_: Any, exc: HTTPException) -> JSONResponse:
