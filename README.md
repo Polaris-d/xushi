@@ -61,7 +61,20 @@ curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scr
 安装指定版本：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_VERSION=v0.1.1 sh
+curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_VERSION=v0.1.2 sh
+```
+
+如果 agent 已经征得用户同意，也可以同时静默安装 `xushi-skills` 到 Codex，帮助 agent 正确选择喝水、起立活动、截止任务等任务类型：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_INSTALL_AGENT_SKILLS=codex sh
+```
+
+Windows PowerShell：
+
+```powershell
+$env:XUSHI_INSTALL_AGENT_SKILLS = "codex"
+irm https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.ps1 | iex
 ```
 
 ## 为什么做序时
@@ -84,6 +97,7 @@ curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scr
 | CLI | 可用 | `init`、`doctor`、`create`、`list`、`trigger`、`tick`、`executors`、`notifications`、`upgrade` |
 | Web 管理台 | 可用 | 访问 daemon 根路径查看任务、运行记录和通知 |
 | OpenClaw 插件 | 可用 | `plugins/openclaw-xushi`，提供创建、查询、触发、确认和 callback 工具 |
+| xushi-skills | 可用 | `skills/xushi-skills`，帮助 agent 判断任务类型、生成 schema 并适当追问 |
 | OpenClaw executor | 可用 | 投递到 OpenClaw `/hooks/agent` |
 | Hermes executor | 可用 | 可配置 HTTP agent webhook |
 | 跟进闭环 | 可用 | 未确认任务按策略重复提醒，确认后停止 |
@@ -260,8 +274,8 @@ uv build --wheel
 发布正式版本时创建并推送 SemVer tag：
 
 ```powershell
-git tag v0.1.1
-git push origin v0.1.1
+git tag v0.1.2
+git push origin v0.1.2
 ```
 
 `.github/workflows/release.yml` 会在 tag 上执行跨平台质量检查，生成 Python wheel/sdist、Windows/macOS/Linux 单文件二进制、OpenClaw 插件 zip，并在 GitHub Release 中附带 `SHA256SUMS.txt` 校验和与自动 release notes。
@@ -270,9 +284,9 @@ git push origin v0.1.1
 
 ```powershell
 xushi upgrade status
-xushi upgrade check --version v0.1.1
+xushi upgrade check --version v0.1.2
 xushi upgrade backup
-xushi upgrade apply --version v0.1.1 --yes
+xushi upgrade apply --version v0.1.2 --yes
 xushi upgrade rollback
 ```
 

@@ -1,3 +1,7 @@
+param(
+    [string] $AgentSkills = $env:XUSHI_INSTALL_AGENT_SKILLS
+)
+
 $ErrorActionPreference = "Stop"
 
 $RepoSlug = $env:XUSHI_REPO_SLUG
@@ -63,6 +67,50 @@ function Install-Binary {
     Move-Item -Force -Path $temp -Destination $target
 }
 
+function Install-XushiSkillsForCodex {
+    $codexHome = $env:CODEX_HOME
+    if (-not $codexHome) {
+        $codexHome = Join-Path $env:USERPROFILE ".codex"
+    }
+    $skillsDir = Join-Path $codexHome "skills"
+    $target = Join-Path $skillsDir "xushi-skills"
+    $tempDir = Join-Path $skillsDir ".xushi-skills-download"
+    $archive = Join-Path $skillsDir "xushi-skills.zip"
+    $timestamp = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
+    $url = Get-ReleaseUrl "xushi-skills.zip"
+
+    Write-Host "Installing xushi-skills for Codex"
+    New-Item -ItemType Directory -Force -Path $skillsDir | Out-Null
+    if (Test-Path $tempDir) {
+        Remove-Item -Recurse -Force -LiteralPath $tempDir
+    }
+    New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
+    Invoke-WebRequest -Uri $url -OutFile $archive -UseBasicParsing
+    Expand-Archive -Force -Path $archive -DestinationPath $tempDir
+    if (-not (Test-Path (Join-Path $tempDir "xushi-skills\SKILL.md"))) {
+        throw "Invalid xushi-skills archive: missing SKILL.md"
+    }
+    if (Test-Path $target) {
+        Move-Item -Force -Path $target -Destination (Join-Path $skillsDir "xushi-skills.backup-$timestamp")
+    }
+    Move-Item -Force -Path (Join-Path $tempDir "xushi-skills") -Destination $target
+    Remove-Item -Recurse -Force -LiteralPath $tempDir
+    Remove-Item -Force -LiteralPath $archive
+}
+
+function Install-AgentSkills {
+    if (-not $AgentSkills) {
+        return
+    }
+    foreach ($target in ($AgentSkills -split ",")) {
+        switch ($target.Trim().ToLowerInvariant()) {
+            "codex" { Install-XushiSkillsForCodex }
+            "" { }
+            default { throw "Unsupported XUSHI_INSTALL_AGENT_SKILLS target: $target" }
+        }
+    }
+}
+
 function Ensure-UserPath {
     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
     if (-not $userPath) {
@@ -93,6 +141,7 @@ New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
 Install-Binary "xushi" $platformTag
 Install-Binary "xushi-daemon" $platformTag
 Ensure-UserPath
+Install-AgentSkills
 
 & (Join-Path $BinDir "xushi.exe") init --show-token
 & (Join-Path $BinDir "xushi.exe") doctor
@@ -100,5 +149,8 @@ Ensure-UserPath
 Write-Host ""
 Write-Host "xushi is installed into $BinDir."
 Write-Host "Global command path has been configured for new PowerShell sessions."
+if ($AgentSkills) {
+    Write-Host "Agent skills installed for: $AgentSkills"
+}
 Write-Host "Start daemon:"
 Write-Host "  xushi-daemon"

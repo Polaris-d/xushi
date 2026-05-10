@@ -47,6 +47,10 @@ def test_install_scripts_use_safe_defaults() -> None:
     assert "xushi-daemon" in sh
     assert "Ensure-UserPath" in ps1
     assert "ensure_path_config" in sh
+    assert "XUSHI_INSTALL_AGENT_SKILLS" in ps1
+    assert "XUSHI_INSTALL_AGENT_SKILLS" in sh
+    assert "xushi-skills.zip" in ps1
+    assert "xushi-skills.zip" in sh
 
 
 def test_openclaw_hooks_agent_uses_environment_configuration() -> None:
@@ -93,6 +97,7 @@ def test_release_workflow_publishes_tagged_artifacts() -> None:
     assert "actions/upload-artifact" in release_workflow
     assert "actions/download-artifact" in release_workflow
     assert "scripts/prepare_release_assets.py" in release_workflow
+    assert "--skills" in release_workflow
     assert "merge-multiple: true" in release_workflow
     assert "SHA256SUMS.txt" in release_workflow
     assert "generate_release_notes: true" in release_workflow
@@ -125,3 +130,26 @@ def test_security_policy_avoids_private_tokens_in_reports() -> None:
 
     assert "不要公开粘贴 token" in security
     assert "GitHub Security Advisory" in security
+
+
+def test_xushi_skills_include_agent_task_type_guidance() -> None:
+    skill = (ROOT / "skills" / "xushi-skills" / "SKILL.md").read_text(encoding="utf-8")
+    task_types = (
+        ROOT / "skills" / "xushi-skills" / "references" / "task-types.md"
+    ).read_text(encoding="utf-8")
+    schema_patterns = (
+        ROOT / "skills" / "xushi-skills" / "references" / "schema-patterns.md"
+    ).read_text(encoding="utf-8")
+    questions = (
+        ROOT / "skills" / "xushi-skills" / "references" / "clarification-questions.md"
+    ).read_text(encoding="utf-8")
+
+    assert "name: xushi-skills" in skill
+    assert "anchor: \"completion\"" in skill
+    assert "喝水" in task_types
+    assert "起立" in task_types
+    assert "deadline" in task_types
+    assert "floating" in task_types
+    assert "FREQ=HOURLY;INTERVAL=2" in schema_patterns
+    assert "下一次提醒要按固定时间算" in questions
+    assert "确认完成" in questions
