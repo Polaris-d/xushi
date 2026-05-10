@@ -143,7 +143,7 @@ export default definePluginEntry({
 
     api.registerTool({
       name: "xushi_list_executors",
-      description: "列出本机 xushi config.json 中的执行器配置，用于确认 OpenClaw /hooks/agent 投递链路是否可用。",
+      description: "列出本机 xushi config.json 中的执行器配置，用于确认 OpenClaw /hooks/agent 或 Hermes webhook 投递链路是否可用。",
       parameters: Type.Object({}),
       async execute() {
         return textResult(await xushiRequest(config, "/api/v1/executors"));
@@ -157,7 +157,7 @@ export default definePluginEntry({
         parameters: Type.Object({}),
         async execute() {
           return textResult({
-            install: "下载 xushi 预编译二进制后运行 xushi init --show-token、xushi doctor、xushi-daemon。",
+            install: "运行 scripts/install.ps1 或 scripts/install.sh，从 GitHub Release 下载二进制并配置全局命令，然后启动 xushi-daemon。",
             devInstall:
               "uv sync; uv run xushi init --show-token; $env:XUSHI_API_TOKEN='<local-token>'; uv run xushi-daemon",
             baseUrl: config.baseUrl,

@@ -31,7 +31,8 @@
 - OpenClaw executor 必须支持 `token_env`，避免把 OpenClaw hook token 写入任务或 executor JSON。
 - OpenClaw executor 必须支持 `/hooks/agent` 的可选字段：`name`、`agent_id`、`wake_mode`、`deliver`、`channel`、`to`、`model`、`fallbacks`、`thinking`、`timeout_seconds`。
 - OpenClaw executor 必须暴露 `insecure_tls` 配置项；默认保持 TLS 证书校验，仅在用户显式配置本机自签名 HTTPS 时关闭校验。
-- Hermes 和通用 webhook executor v1 仅保留 schema 位置，调用时返回明确未实现状态。
+- Hermes executor 必须支持可配置 HTTP agent webhook，支持 `webhook_url`、`token_env`、`message_field`、`agent_id`、`conversation_id`、`channel`、`deliver` 和请求超时配置。
+- 通用 webhook executor v1 仅保留 schema 位置，调用时返回明确未实现状态。
 - v1 暂不提供 command executor，避免跨平台 shell、命令注入和环境差异扩大配置复杂度。
 - OpenClaw 插件必须提供执行器查看工具；executor 写入由本地 `config.json` 管理，不通过 API 或插件保存。
 - 长任务支持执行器异步回调最终结果，更新运行记录成功或失败状态。
@@ -40,10 +41,11 @@
 - 提供本地配置初始化命令，生成本地 token、SQLite 路径和 daemon 端口配置，便于 OpenClaw 插件和用户共享同一连接信息。
 - 提供诊断命令，检查配置文件、数据库目录和监听端口，帮助用户定位 daemon 跑不起来的问题。
 - 提供面向人类复制给 LLM Agent 的安装提示词和 agent 可读安装指南。
-- 提供 Windows PowerShell 与 macOS/Linux shell 安装脚本，默认安装到用户本地目录。
+- 提供 Windows PowerShell 与 macOS/Linux shell 安装脚本，默认从 GitHub Release 下载预编译二进制并安装到用户本地全局命令目录。
+- 安装脚本必须把 `xushi` 和 `xushi-daemon` 配置为用户级全局命令。
 - 提供用户手动触发的 CLI 安全升级能力；序时不得静默自动升级。
 - 手动升级必须先备份 `config.json`、SQLite 数据库和存在的 WAL/SHM sidecar，升级失败时不得丢失旧数据。
-- 手动升级必须支持查看状态、检查目标版本、创建备份、执行升级和从备份恢复。
+- 手动升级必须支持查看状态、检查目标版本、创建备份、从 GitHub Release 下载替换全局命令和从备份恢复。
 - 提供 wheel 和跨平台预编译二进制构建配置，降低非 Python 用户安装门槛。
 - 提供 tag 触发的 GitHub Release 工作流，发布 wheel 与跨平台二进制产物。
 - GitHub Release 资产必须使用唯一、可读的平台命名，并包含 OpenClaw 插件包、自动 release notes 和 SHA256 校验和。
@@ -96,10 +98,12 @@
 | 2026-05-09 | 更正 | 修复 reminder 忽略 executor 的投递断点，并明确无 executor 时仅本地通知。 |
 | 2026-05-10 | 更正 | 撤回早期 command bridge 方案，避免跨平台和安全边界复杂度。 |
 | 2026-05-10 | 调整 | OpenClaw 默认投递链路从 TaskFlow webhook 调整为 `/hooks/agent`，由 agent 处理并投递到聊天渠道。 |
-| 2026-05-10 | 调整 | 移除 command executor；Hermes 和通用 webhook executor 暂时仅保留预留位置不实现投递。 |
+| 2026-05-10 | 调整 | 移除 command executor；通用 webhook executor 暂时仅保留预留位置不实现投递。 |
 | 2026-05-10 | 明确 | 完善 OpenClaw `/hooks/agent` 可选字段映射，支持指定 agent、session、channel、recipient、model、fallbacks 和 thinking。 |
 | 2026-05-10 | 调整 | OpenClaw HTTPS 自签名证书改为显式 `insecure_tls` 配置，默认保持 HTTP 示例和 TLS 校验。 |
 | 2026-05-10 | 调整 | executor 配置从 SQLite/API 保存调整为 `config.json` 管理，OpenClaw 插件仅保留查看工具。 |
 | 2026-05-10 | 调整 | 默认本地 API 端口从 `8766` 调整为更高位且保留原记忆点的 `18766`。 |
 | 2026-05-10 | 调整 | GitHub Release 流程调整为分离质量检查、Python 包、平台二进制和发布步骤，并生成唯一资产名与校验和。 |
 | 2026-05-10 | 新增 | 增加用户手动触发的 CLI 安全升级需求，要求升级前备份配置和 SQLite 数据，并支持 rollback。 |
+| 2026-05-10 | 调整 | 安装与升级链路调整为从 GitHub Release 下载二进制，并配置 `xushi` / `xushi-daemon` 为全局命令。 |
+| 2026-05-10 | 调整 | Hermes executor 从预留未实现调整为可配置 HTTP agent webhook 投递。 |

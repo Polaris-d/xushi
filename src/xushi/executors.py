@@ -9,8 +9,10 @@ from typing import Any
 from urllib import error, request
 
 from xushi.bridges import (
+    DEFAULT_HERMES_TOKEN_ENVS,
     DEFAULT_OPENCLAW_HOOKS_AGENT_URL,
     DEFAULT_OPENCLAW_TOKEN_ENVS,
+    build_hermes_agent_body,
     build_openclaw_hooks_agent_body,
     parse_bool,
 )
@@ -56,7 +58,7 @@ class ExecutorRegistry:
         if executor.kind == "webhook":
             return self._reserved_executor(executor)
         if executor.kind == "hermes":
-            return self._reserved_executor(executor)
+            return self._execute_hermes(action, executor)
         return {"delivered": False, "error": f"unsupported executor kind: {executor.kind}"}
 
     def _execute_openclaw(self, action: Action, executor: Executor) -> dict[str, Any]:
@@ -97,6 +99,62 @@ class ExecutorRegistry:
             "executor": executor.id,
             "kind": executor.kind,
             "mode": "hooks_agent",
+        }
+
+    def _execute_hermes(self, action: Action, executor: Executor) -> dict[str, Any]:
+        mode = str(executor.config.get("mode") or "agent_webhook")
+        if mode in {"agent_webhook", "webhook"}:
+            return self._execute_hermes_agent_webhook(action, executor, mode)
+        return {
+            "delivered": False,
+            "executor": executor.id,
+            "kind": executor.kind,
+            "mode": mode,
+            "error": f"unsupported hermes executor mode: {mode}",
+        }
+
+    def _execute_hermes_agent_webhook(
+        self,
+        action: Action,
+        executor: Executor,
+        mode: str,
+    ) -> dict[str, Any]:
+        webhook_url = executor.config.get("webhook_url")
+        if not webhook_url:
+            return {
+                "delivered": False,
+                "executor": executor.id,
+                "kind": executor.kind,
+                "mode": mode,
+                "error": "hermes agent_webhook executor missing webhook_url",
+            }
+
+        token = self._resolve_token(executor, default_envs=DEFAULT_HERMES_TOKEN_ENVS)
+        token_required = parse_bool(str(executor.config.get("token_required", "true")))
+        if token_required and not token:
+            return {
+                "delivered": False,
+                "executor": executor.id,
+                "kind": executor.kind,
+                "mode": mode,
+                "error": "hermes agent_webhook executor missing token or token_env",
+            }
+
+        body = build_hermes_agent_body(action.payload, executor.config)
+        timeout_seconds = int(executor.config.get("request_timeout_seconds", 30))
+        insecure_tls = parse_bool(str(executor.config.get("insecure_tls", "false")))
+        result = self._post_json(
+            url=str(webhook_url),
+            body=body,
+            token=token,
+            timeout_seconds=timeout_seconds,
+            insecure_tls=insecure_tls,
+        )
+        return {
+            **result,
+            "executor": executor.id,
+            "kind": executor.kind,
+            "mode": mode,
         }
 
     def _reserved_executor(self, executor: Executor) -> dict[str, Any]:
