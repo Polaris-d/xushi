@@ -159,6 +159,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             [delivery.model_dump(mode="json") for delivery in service.list_deliveries()]
         )
 
+    @app.post("/api/v1/deliveries/retry", dependencies=[Depends(require_token)])
+    def retry_deliveries(
+        limit: Annotated[int | None, Query(ge=1, le=500)] = None,
+    ) -> dict[str, Any]:
+        deliveries = service.retry_failed_deliveries(limit=limit)
+        return api_response([delivery.model_dump(mode="json") for delivery in deliveries])
+
     @app.post("/api/v1/runs/{run_id}/confirm", dependencies=[Depends(require_token)])
     def confirm_run(run_id: str) -> dict[str, Any]:
         run = service.confirm_run(run_id)

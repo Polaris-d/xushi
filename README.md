@@ -101,9 +101,9 @@ irm https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/in
 | 能力 | 状态 | 说明 |
 | --- | --- | --- |
 | Python daemon | 可用 | FastAPI + SQLite，本地调度与 API |
-| CLI | 可用 | `init`、`doctor`、`create`、`list`、`trigger`、`runs`、`confirm-latest`、`tick`、`executors`、`notifications`、`deliveries`、`plugins`、`skills`、`upgrade` |
+| CLI | 可用 | `init`、`doctor`、`create`、`list`、`trigger`、`runs`、`confirm-latest`、`tick`、`executors`、`notifications`、`deliveries`、`retry-deliveries`、`plugins`、`skills`、`upgrade` |
 | Web 管理台 | 可用 | 访问 daemon 根路径查看任务、运行记录和通知 |
-| OpenClaw 插件 | 可用 | `plugins/openclaw-xushi`，提供创建、查询、触发、运行记录过滤、最近确认和 callback 工具 |
+| OpenClaw 插件 | 可用 | `plugins/openclaw-xushi`，提供创建、查询、触发、运行记录过滤、失败投递重试、最近确认和 callback 工具 |
 | xushi-skills | 可用 | `skills/xushi-skills`，帮助 agent 判断任务类型、生成 schema、适当追问并记录本地优化反馈草稿 |
 | OpenClaw executor | 可用 | 投递到 OpenClaw `/hooks/agent` |
 | Hermes executor | 可用 | 可配置 HTTP agent webhook |
@@ -251,6 +251,8 @@ OpenClaw executor 默认通过 OpenClaw 的 `/hooks/agent` 投递提醒，让 ag
 }
 ```
 
+这里有两个容易混淆的 token：OpenClaw 插件调用序时 API 时使用 `XUSHI_API_TOKEN`；序时 daemon 调用 OpenClaw hooks 时使用 `OPENCLAW_HOOKS_TOKEN`，并且这个变量必须存在于 `xushi-daemon` 进程环境中。OpenClaw Gateway 如果启用了 HTTPS，`webhook_url` 也必须改成 `https://...`；本机自签名证书场景可显式设置 `"insecure_tls": true`。如果不设置 `agent_id`，OpenClaw 可能路由到默认 agent/session。
+
 ### Hermes
 
 Hermes executor 支持可配置 HTTP agent webhook。默认请求体会把序时提醒整理为 `prompt` 字段，并附带 `source` 与 `metadata`；如果 Hermes 入口使用 `message` 等字段名，可以通过 `message_field` 调整。
@@ -294,9 +296,16 @@ Hermes executor 支持可配置 HTTP agent webhook。默认请求体会把序时
 
 ```powershell
 xushi executors
+xushi doctor
 ```
 
 如果 `reminder` 没有 `executor_id`，序时只会尝试本地桌面通知；在无桌面的 Linux 服务器上通常只能留下 fallback 记录。
+
+修复 executor token、URL、TLS 或 agent 路由配置并重启 daemon 后，可以重试仍需要投递的失败记录：
+
+```powershell
+xushi retry-deliveries
+```
 
 长任务完成后可回调：
 

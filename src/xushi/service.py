@@ -369,6 +369,26 @@ class XushiService:
         """列出投递计划。"""
         return self.store.list_deliveries()
 
+    def retry_failed_deliveries(
+        self,
+        now: datetime | None = None,
+        *,
+        limit: int | None = None,
+    ) -> list[Delivery]:
+        """为仍需投递的失败 delivery 创建一次新的投递尝试。"""
+        current = now or datetime.now(tz=UTC)
+        created: list[Delivery] = []
+        for delivery in self.store.list_deliveries():
+            if limit is not None and len(created) >= limit:
+                break
+            if not self._failed_delivery_can_retry(delivery):
+                continue
+            created.append(self._create_retry_delivery(delivery, current))
+
+        if created:
+            self.process_deliveries(current)
+        return [self.store.get_delivery(delivery.id) or delivery for delivery in created]
+
     def _get_executor(self, executor_id: str) -> Executor | None:
         """按 ID 获取启用的 executor 配置。"""
         return self._executor_map.get(executor_id)
@@ -487,7 +507,7 @@ class XushiService:
         result = self.executors.execute(delivery.action, executor)
         delivered = bool(result.get("delivered"))
         delivery.status = DeliveryStatus.DELIVERED if delivered else DeliveryStatus.FAILED
-        delivery.result = result
+        delivery.result = {**delivery.result, **result}
         delivery.error = result.get("error")
         delivery.updated_at = current
         self.store.save_delivery(delivery)
@@ -595,6 +615,60 @@ class XushiService:
         }
         run.error = run.error or result.get("error")
         self.store.save_run(run)
+
+    def _failed_delivery_can_retry(self, delivery: Delivery) -> bool:
+        """判断失败投递是否仍对应一个可重试的 run。"""
+        if (
+            delivery.status != DeliveryStatus.FAILED
+            or delivery.run_id is None
+            or delivery.task_id is None
+        ):
+            return False
+        run = self.get_run(delivery.run_id)
+        task = self.get_task(delivery.task_id)
+        if run is None or task is None or task.status != TaskStatus.ACTIVE:
+            return False
+        if run.status in {RunStatus.SUCCEEDED, RunStatus.CANCELLED} or run.confirmed_at:
+            return False
+        return run.result.get("delivery_id") == delivery.id
+
+    def _create_retry_delivery(self, delivery: Delivery, current: datetime) -> Delivery:
+        """创建新的 delivery，保留原失败记录作为审计历史。"""
+        run = self.get_run(str(delivery.run_id))
+        if run is None:
+            raise KeyError(str(delivery.run_id))
+
+        retry = Delivery(
+            id=f"delivery_{uuid4().hex}",
+            run_id=delivery.run_id,
+            task_id=delivery.task_id,
+            kind=delivery.kind,
+            action=delivery.action,
+            due_at=delivery.due_at,
+            deliver_at=current,
+            status=DeliveryStatus.PENDING,
+            reason=delivery.reason,
+            result={
+                "retry_of": delivery.id,
+                "retry_requested_at": current.isoformat(),
+            },
+            created_at=current,
+            updated_at=current,
+        )
+        self.store.save_delivery(retry)
+
+        run.status = RunStatus.PENDING_DELIVERY
+        run.finished_at = None
+        run.error = None
+        run.result = {
+            **run.result,
+            "delivery_id": retry.id,
+            "delivery_status": retry.status,
+            "retry_of_delivery_id": delivery.id,
+            "retry_requested_at": current.isoformat(),
+        }
+        self.store.save_run(run)
+        return retry
 
     def _group_follow_ups_by_origin(self, runs: list[Run]) -> dict[str, list[Run]]:
         grouped: dict[str, list[Run]] = {}

@@ -8,7 +8,7 @@ from typer.testing import CliRunner
 
 from xushi.cli import app
 from xushi.config import Settings
-from xushi.models import Schedule, TaskCreate
+from xushi.models import Executor, Schedule, TaskCreate
 from xushi.service import XushiService
 
 
@@ -57,6 +57,56 @@ def test_cli_lists_deliveries(tmp_path, monkeypatch) -> None:
     assert result.exit_code == 0
     assert "delivered" in result.output
     assert task.id in result.output
+
+
+def test_cli_retry_deliveries_requeues_failed_delivery(tmp_path, monkeypatch) -> None:
+    database_path = tmp_path / "xushi.db"
+    monkeypatch.setenv("XUSHI_DATABASE_PATH", str(database_path))
+    monkeypatch.delenv("OPENCLAW_HOOKS_TOKEN", raising=False)
+    monkeypatch.delenv("OPENCLAW_WEBHOOK_TOKEN", raising=False)
+    service = XushiService(
+        Settings(
+            database_path=database_path,
+            api_token="test-token",
+            executors=(
+                Executor(
+                    id="openclaw",
+                    kind="openclaw",
+                    name="OpenClaw",
+                    config={
+                        "mode": "hooks_agent",
+                        "webhook_url": "http://127.0.0.1:18789/hooks/agent",
+                        "token_env": "OPENCLAW_HOOKS_TOKEN",
+                    },
+                ),
+            ),
+        )
+    )
+    task = service.create_task(
+        TaskCreate(
+            title="喝水",
+            schedule=Schedule(
+                kind="one_shot",
+                run_at=datetime(2026, 5, 9, 12, 0, tzinfo=UTC),
+                timezone="UTC",
+            ),
+            action={
+                "type": "reminder",
+                "executor_id": "openclaw",
+                "payload": {"message": "喝水"},
+            },
+        )
+    )
+    service.trigger_task(task.id, now=datetime(2026, 5, 9, 12, 0, tzinfo=UTC))
+    failed_delivery = service.list_deliveries()[0]
+
+    result = CliRunner().invoke(app, ["retry-deliveries"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert len(payload) == 1
+    assert payload[0]["status"] == "failed"
+    assert payload[0]["result"]["retry_of"] == failed_delivery.id
 
 
 def test_cli_installs_bundled_skills(tmp_path) -> None:
@@ -216,6 +266,32 @@ def test_cli_doctor_reports_config_and_database_path(tmp_path) -> None:
     assert report["database_path"] == str(state_dir / "xushi.db")
     assert "api_token" in report
     assert report["executors"][0]["id"] == "openclaw"
+    assert "diagnostics" in report["executors"][0]
+
+
+def test_cli_doctor_warns_about_openclaw_token_and_agent_id(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("OPENCLAW_HOOKS_TOKEN", raising=False)
+    config_path = tmp_path / "config.json"
+    state_dir = tmp_path / "state"
+    init_result = CliRunner().invoke(
+        app,
+        [
+            "init",
+            "--config-path",
+            str(config_path),
+            "--state-dir",
+            str(state_dir),
+        ],
+    )
+    assert init_result.exit_code == 0
+
+    result = CliRunner().invoke(app, ["doctor", "--config-path", str(config_path)])
+
+    assert result.exit_code == 0
+    report = json.loads(result.output)
+    diagnostics = report["executors"][0]["diagnostics"]
+    assert "token_env_not_present_in_process:OPENCLAW_HOOKS_TOKEN" in diagnostics
+    assert "agent_id_missing_routes_to_openclaw_default_agent" in diagnostics
 
 
 def test_cli_upgrade_status_reports_local_paths(tmp_path, monkeypatch) -> None:

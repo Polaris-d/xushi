@@ -196,6 +196,61 @@ def test_list_deliveries_endpoint(tmp_path) -> None:
     assert response.json()["data"] == []
 
 
+def test_retry_deliveries_endpoint(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("OPENCLAW_HOOKS_TOKEN", raising=False)
+    settings = Settings(
+        database_path=tmp_path / "xushi.db",
+        api_token="test-token",
+        executors=(
+            Executor(
+                id="openclaw",
+                kind="openclaw",
+                name="OpenClaw",
+                config={
+                    "mode": "hooks_agent",
+                    "webhook_url": "http://127.0.0.1:18789/hooks/agent",
+                    "token_env": "OPENCLAW_HOOKS_TOKEN",
+                },
+            ),
+        ),
+    )
+    client = TestClient(create_app(settings))
+    create_response = client.post(
+        "/api/v1/tasks",
+        headers={"Authorization": "Bearer test-token"},
+        json={
+            "title": "喝水",
+            "schedule": {
+                "kind": "one_shot",
+                "run_at": datetime(2026, 5, 9, 12, 0, tzinfo=UTC).isoformat(),
+                "timezone": "UTC",
+            },
+            "action": {
+                "type": "reminder",
+                "executor_id": "openclaw",
+                "payload": {"message": "喝水"},
+            },
+        },
+    )
+    task_id = create_response.json()["data"]["id"]
+    run_response = client.post(
+        f"/api/v1/tasks/{task_id}/runs",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    failed_delivery_id = run_response.json()["data"]["result"]["delivery_id"]
+
+    response = client.post(
+        "/api/v1/deliveries/retry",
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 200
+    retried = response.json()["data"]
+    assert len(retried) == 1
+    assert retried[0]["status"] == "failed"
+    assert retried[0]["result"]["retry_of"] == failed_delivery_id
+
+
 def test_executor_api_is_read_only_and_uses_config_file(tmp_path) -> None:
     settings = Settings(
         database_path=tmp_path / "xushi.db",

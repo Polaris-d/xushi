@@ -27,6 +27,16 @@ Use this skill to operate xushi as an agent-facing local scheduler. Prefer it wh
 7. When the user later says the work is done, confirm the relevant run instead of only replying conversationally. If the task id is known, prefer confirming the latest pending run for that task before listing all runs.
 8. If real xushi usage exposes a product issue, confusing behavior, missing guide, or recurring workaround, record a local optimization note. Do not upload or send it unless the user asks.
 
+## Integration Setup Checks
+
+- Before installing agent add-ons, ask the user whether to install the OpenClaw plugin and `xushi-skills`. Strongly recommend yes for OpenClaw/Hermes users, then use installer parameters for non-interactive installation.
+- Keep token scopes separate: `XUSHI_API_TOKEN` belongs to the agent/plugin process that calls xushi; `OPENCLAW_HOOKS_TOKEN` and `HERMES_API_TOKEN` belong to the `xushi-daemon` process that calls agent hooks.
+- After changing `~/.xushi/config.json` or daemon-side hook tokens, restart `xushi-daemon` and run `xushi doctor`.
+- For OpenClaw TLS, match the URL scheme to the Gateway. HTTPS Gateway needs `https://...`; local self-signed HTTPS also needs `"insecure_tls": true`.
+- For OpenClaw routing, set `agent_id` when the reminder must reach a specific working agent. If it is missing, OpenClaw may use its default agent/session.
+- After configuration, create one unique smoke-test reminder with `action.executor_id` set, then ask the user whether the target channel received it.
+- If a delivery failed before the configuration was fixed, use `xushi_retry_deliveries` from the OpenClaw plugin or `xushi retry-deliveries` from the shell after restarting the daemon.
+
 ## Reference Map
 
 - Read `references/task-types.md` when choosing a schedule kind or explaining which type fits a real-world request.

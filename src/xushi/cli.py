@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import json
+import os
 import socket
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 
+from xushi.bridges import (
+    DEFAULT_HERMES_TOKEN_ENVS,
+    DEFAULT_OPENCLAW_TOKEN_ENVS,
+    parse_bool,
+)
 from xushi.config import Settings, default_config_path, write_initial_config
 from xushi.models import Executor, RunStatus, TaskCreate
 from xushi.plugins import bundled_plugin_status, install_bundled_plugin
@@ -69,6 +75,88 @@ def _echo_json(payload: object) -> None:
     typer.echo(json.dumps(payload, ensure_ascii=False, indent=2))
 
 
+def _executor_report(executor: Executor) -> dict[str, Any]:
+    """生成 executor 的安装诊断信息。"""
+    config = executor.config
+    token_env = config.get("token_env")
+    inline_token = bool(config.get("token"))
+    default_token_envs = _default_token_envs(executor)
+    default_token_env_present = [name for name in default_token_envs if os.environ.get(name)]
+    diagnostics: list[str] = []
+
+    token_env_present = bool(os.environ.get(str(token_env))) if token_env else None
+    token_required = _executor_token_required(executor)
+    token_available = inline_token or bool(token_env_present) or bool(default_token_env_present)
+    if token_required and not token_available:
+        if token_env:
+            if not token_env_present:
+                diagnostics.append(f"token_env_not_present_in_process:{token_env}")
+        elif default_token_envs:
+            diagnostics.append(
+                f"default_token_envs_not_present:{','.join(default_token_envs)}"
+            )
+        else:
+            diagnostics.append("token_env_missing")
+    if inline_token:
+        diagnostics.append("inline_token_configured_prefer_token_env")
+
+    mode = str(config.get("mode") or _default_executor_mode(executor))
+    webhook_url = config.get("webhook_url")
+    insecure_tls = parse_bool(str(config.get("insecure_tls", "false")))
+    if insecure_tls and webhook_url and str(webhook_url).startswith("http://"):
+        diagnostics.append("insecure_tls_has_no_effect_for_http_url")
+
+    if executor.kind == "openclaw" and mode == "hooks_agent":
+        if not config.get("agent_id") and not config.get("agentId"):
+            diagnostics.append("agent_id_missing_routes_to_openclaw_default_agent")
+        if webhook_url and str(webhook_url).startswith("http://"):
+            diagnostics.append("if_openclaw_tls_enabled_use_https_webhook_url")
+
+    return {
+        "id": executor.id,
+        "kind": executor.kind,
+        "enabled": executor.enabled,
+        "mode": mode,
+        "webhook_url": webhook_url,
+        "token_env": token_env,
+        "default_token_envs": list(default_token_envs),
+        "default_token_env_present": default_token_env_present,
+        "token_env_present": token_env_present,
+        "token_available": token_available,
+        "inline_token_configured": inline_token,
+        "token_required": token_required,
+        "agent_id": config.get("agent_id") or config.get("agentId"),
+        "deliver": config.get("deliver"),
+        "insecure_tls": insecure_tls,
+        "diagnostics": diagnostics,
+    }
+
+
+def _executor_token_required(executor: Executor) -> bool:
+    """判断 executor 是否需要鉴权 token。"""
+    if executor.kind == "hermes":
+        return parse_bool(str(executor.config.get("token_required", "true")))
+    return executor.kind != "webhook"
+
+
+def _default_executor_mode(executor: Executor) -> str:
+    """返回 executor 默认模式。"""
+    if executor.kind == "openclaw":
+        return "hooks_agent"
+    if executor.kind == "hermes":
+        return "agent_webhook"
+    return "template"
+
+
+def _default_token_envs(executor: Executor) -> tuple[str, ...]:
+    """返回 executor 默认 token 环境变量。"""
+    if executor.kind == "openclaw":
+        return DEFAULT_OPENCLAW_TOKEN_ENVS
+    if executor.kind == "hermes":
+        return DEFAULT_HERMES_TOKEN_ENVS
+    return ()
+
+
 @app.command("init")
 def init_config(
     config_path: Annotated[
@@ -118,17 +206,11 @@ def doctor(
         "database_parent_exists": database_parent.exists(),
         "host": settings.host,
         "port": settings.port,
+        "base_url": f"http://{settings.host}:{settings.port}",
         "port_status": _check_port(settings.host, settings.port),
         "scheduler_interval_seconds": settings.scheduler_interval_seconds,
         "api_token": _mask_token(settings.api_token),
-        "executors": [
-            {
-                "id": executor.id,
-                "kind": executor.kind,
-                "enabled": executor.enabled,
-            }
-            for executor in settings.executors
-        ],
+        "executors": [_executor_report(executor) for executor in settings.executors],
     }
     _echo_json(report)
 
@@ -238,6 +320,21 @@ def notifications() -> None:
 def deliveries() -> None:
     """列出投递计划。"""
     items = [delivery.model_dump(mode="json") for delivery in _service().list_deliveries()]
+    _echo_json(items)
+
+
+@app.command("retry-deliveries")
+def retry_deliveries(
+    limit: Annotated[
+        int | None,
+        typer.Option(help="最多重试多少条 failed delivery。"),
+    ] = None,
+) -> None:
+    """重试仍需要投递的 failed delivery。"""
+    items = [
+        delivery.model_dump(mode="json")
+        for delivery in _service().retry_failed_deliveries(limit=limit)
+    ]
     _echo_json(items)
 
 

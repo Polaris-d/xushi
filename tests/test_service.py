@@ -61,6 +61,82 @@ def test_reminder_with_missing_executor_records_failure(tmp_path) -> None:
     assert run.error == "executor not found"
 
 
+def test_retry_failed_deliveries_after_executor_config_fix(tmp_path, monkeypatch) -> None:
+    database_path = tmp_path / "xushi.db"
+    executor = Executor(
+        id="openclaw",
+        kind="openclaw",
+        name="OpenClaw",
+        config={
+            "mode": "hooks_agent",
+            "webhook_url": "http://127.0.0.1:18789/hooks/agent",
+            "token_env": "OPENCLAW_HOOKS_TOKEN",
+        },
+    )
+    service = XushiService(
+        Settings(database_path=database_path, api_token="test-token", executors=(executor,))
+    )
+    task = service.create_task(
+        TaskCreate(
+            title="喝水",
+            schedule=Schedule(
+                kind="one_shot",
+                run_at=datetime(2026, 5, 9, 12, 0, tzinfo=UTC),
+                timezone="UTC",
+            ),
+            action={
+                "type": "reminder",
+                "executor_id": "openclaw",
+                "payload": {"message": "该喝水了"},
+            },
+        )
+    )
+    failed_run = service.trigger_task(task.id, now=datetime(2026, 5, 9, 12, 0, tzinfo=UTC))
+    failed_delivery = service.list_deliveries()[0]
+
+    requests: list[tuple[str, str]] = []
+
+    class FakeResponse:
+        status = 200
+
+        def __enter__(self) -> "FakeResponse":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b'{"ok": true}'
+
+    def fake_urlopen(req, timeout: int, context=None):
+        requests.append((req.full_url, req.headers["Authorization"]))
+        return FakeResponse()
+
+    monkeypatch.setenv("OPENCLAW_HOOKS_TOKEN", "secret-token")
+    monkeypatch.setattr("xushi.executors.request.urlopen", fake_urlopen)
+
+    fixed_service = XushiService(
+        Settings(database_path=database_path, api_token="test-token", executors=(executor,))
+    )
+    retried = fixed_service.retry_failed_deliveries(
+        now=datetime(2026, 5, 9, 12, 5, tzinfo=UTC)
+    )
+
+    updated_run = fixed_service.get_run(failed_run.id)
+    deliveries = fixed_service.list_deliveries()
+    assert failed_run.status == "failed"
+    assert failed_delivery.status == "failed"
+    assert len(retried) == 1
+    assert retried[0].status == "delivered"
+    assert retried[0].result["retry_of"] == failed_delivery.id
+    assert updated_run is not None
+    assert updated_run.status == "succeeded"
+    assert [delivery.status for delivery in deliveries] == ["failed", "delivered"]
+    assert requests == [
+        ("http://127.0.0.1:18789/hooks/agent", "Bearer secret-token"),
+    ]
+
+
 def test_manual_trigger_uses_executor_from_settings(tmp_path, monkeypatch) -> None:
     requests: list[tuple[str, str]] = []
 

@@ -170,6 +170,22 @@ export default definePluginEntry({
     });
 
     api.registerTool({
+      name: "xushi_retry_deliveries",
+      description:
+        "重试仍需要投递的 failed delivery。修复 executor token、URL、TLS 或 agent_id 配置并重启 daemon 后再使用。",
+      parameters: Type.Object({
+        limit: Type.Optional(Type.Number({ description: "最多重试多少条 failed delivery。" })),
+      }),
+      async execute(_id, params: { limit?: number }) {
+        return textResult(
+          await xushiRequest(config, withQuery("/api/v1/deliveries/retry", params), {
+            method: "POST",
+          }),
+        );
+      },
+    });
+
+    api.registerTool({
       name: "xushi_confirm_run",
       description: "确认一个 xushi run 已完成，用于停止后续跟进提醒。",
       parameters: Type.Object({

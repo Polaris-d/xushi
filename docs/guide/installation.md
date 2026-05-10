@@ -196,9 +196,18 @@ For OpenClaw, install or enable the OpenClaw plugin with `xushi plugins install 
 
 Pay attention to where environment variables live:
 
-- `XUSHI_API_TOKEN` must be visible to the OpenClaw or Hermes process that calls xushi.
-- Setting the variable in a temporary terminal is not enough if the agent app was already running.
+| Variable | Must be visible to | Purpose |
+| ---- | ---- | ---- |
+| `XUSHI_API_TOKEN` | OpenClaw plugin, Hermes client, or any agent process that calls xushi HTTP API | Authorizes agent -> `xushi-daemon` API calls |
+| `OPENCLAW_HOOKS_TOKEN` | The `xushi-daemon` process | Authorizes `xushi-daemon` -> OpenClaw `/hooks/agent` delivery |
+| `HERMES_API_TOKEN` | The `xushi-daemon` process | Authorizes `xushi-daemon` -> Hermes agent webhook delivery |
+
+Common mistakes:
+
+- `XUSHI_API_TOKEN` and `OPENCLAW_HOOKS_TOKEN` are different tokens for opposite directions. Do not reuse one as the other unless the target system explicitly says so.
+- Setting a variable in a temporary terminal is not enough if the agent app or daemon was already running.
 - After changing agent environment variables, restart or reload that agent integration before testing.
+- After changing daemon environment variables, restart `xushi-daemon` from an environment that contains those variables.
 
 #### 5.3 Configure one delivery executor first
 
@@ -212,6 +221,13 @@ If reminders should be delivered back into OpenClaw, enable OpenClaw hooks and c
 
 ```bash
 export OPENCLAW_HOOKS_TOKEN="<local-openclaw-hooks-token>"
+```
+
+On Windows PowerShell:
+
+```powershell
+$env:OPENCLAW_HOOKS_TOKEN = "<local-openclaw-hooks-token>"
+xushi-daemon
 ```
 
 Then edit the `executors` array so the OpenClaw executor points directly at OpenClaw `/hooks/agent`:
@@ -244,9 +260,21 @@ Check these details before testing:
 - `token_env` is the environment variable name, not the secret value.
 - `OPENCLAW_HOOKS_TOKEN` must be present in the `xushi-daemon` process environment.
 - `webhook_url` must be reachable from the machine/process running `xushi-daemon`.
-- If OpenClaw uses local HTTPS with a self-signed certificate, either use HTTP for local setup or explicitly set `insecure_tls: true` only after the user understands the tradeoff.
+- If OpenClaw Gateway enables TLS, `webhook_url` must use `https://`. HTTP sent to an HTTPS port can show up as `BadStatusLine` or a protocol-looking delivery failure.
+- If OpenClaw uses local HTTPS with a self-signed certificate, set `"insecure_tls": true` only for local/trusted setups after the user understands the tradeoff.
 - Keep `deliver: true` when the expected result is a chat/channel message.
-- Set `channel`, `to`, `agent_id`, and `wake_mode` to match the user's real OpenClaw setup, not just the example.
+- Set `agent_id` when reminders must go to the current working agent rather than OpenClaw's default agent/session. Set `channel`, `to`, and `wake_mode` to match the user's real OpenClaw setup, not just the example.
+
+Local self-signed HTTPS example:
+
+```json
+{
+  "webhook_url": "https://127.0.0.1:18789/hooks/agent",
+  "token_env": "OPENCLAW_HOOKS_TOKEN",
+  "agent_id": "chase",
+  "insecure_tls": true
+}
+```
 
 #### 5.5 Hermes executor checklist
 
@@ -284,6 +312,7 @@ Check these details before testing:
 Restart `xushi-daemon` after editing `~/.xushi/config.json` or changing hook-token environment variables. Then run:
 
 ```bash
+xushi doctor
 xushi executors
 ```
 
@@ -292,6 +321,7 @@ Expected result:
 - The chosen executor id, such as `openclaw` or `hermes`, appears in the output.
 - `enabled` is `true`.
 - The executor kind and mode match the intended target.
+- `xushi doctor` does not report missing `token_env`, missing hook-token environment variables, or a missing OpenClaw `agent_id` for the route you intend to use.
 
 If the output still shows old values, the daemon probably read a different config file or was not restarted. Re-check `xushi doctor` for `config_path` and restart the daemon from the same environment that contains the hook token variables.
 
@@ -370,11 +400,19 @@ Read the result by layer:
 - Task is created but `xushi executors` does not show the expected executor: config file path is wrong or daemon was not restarted.
 - Delivery is `delayed`: quiet policy is working; check `deliver_at` in `xushi deliveries`.
 - Delivery is `failed`: inspect the delivery error and executor hook token/URL.
+- Delivery error contains `missing token or token_env`: set the hook token in the `xushi-daemon` environment, not only in the agent/plugin environment.
+- Delivery error looks like `BadStatusLine` or protocol noise: check whether OpenClaw is using HTTPS while the executor URL still starts with `http://`.
 - Notification appears but the user saw no chat message: the OpenClaw/Hermes hook may have accepted the request but failed to route it to the configured channel.
 - Local notification appears instead of OpenClaw/Hermes: `action.executor_id` was missing or did not exactly match an enabled executor id.
 - Repeated smoke tests reuse an old task: add a unique title or `idempotency_key` for each setup attempt.
 
-Fix the failing layer, restart `xushi-daemon` if config or environment changed, and send one new smoke-test reminder. Do not mark setup complete until the user confirms receipt.
+Fix the failing layer, restart `xushi-daemon` if config or environment changed, then retry the failed delivery or send one new smoke-test reminder:
+
+```bash
+xushi retry-deliveries
+```
+
+If the OpenClaw plugin is available, use `xushi_retry_deliveries` instead of shelling out. Do not mark setup complete until the user confirms receipt.
 
 ### Notes
 
@@ -382,6 +420,7 @@ Fix the failing layer, restart `xushi-daemon` if config or environment changed, 
 - Do not paste the full local token into public issues, logs, or documentation.
 - If port `18766` is occupied, set `XUSHI_PORT` before running `xushi-daemon`.
 - If `xushi` is not found after install, open a new shell or add `~/.xushi/bin` to PATH manually.
+- If a release binary is not available for the user's platform, use the wheel from the same GitHub Release as a fallback, for example `uv tool install xushi-<version>-py3-none-any.whl` or `pipx install xushi-<version>-py3-none-any.whl`.
 
 ### Manual upgrade
 

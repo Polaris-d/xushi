@@ -44,7 +44,7 @@
 - 提供 CLI 和本地 Web 管理台。
 - 提供 OpenClaw TypeScript 原生插件。
 - 提供本地配置初始化命令，生成本地 token、SQLite 路径和 daemon 端口配置，便于 OpenClaw 插件和用户共享同一连接信息。
-- 提供诊断命令，检查配置文件、数据库目录和监听端口，帮助用户定位 daemon 跑不起来的问题。
+- 提供诊断命令，检查配置文件、数据库目录、监听端口和 executor 环境变量/TLS/agent 路由风险，帮助用户定位 daemon 和投递链路问题。
 - 提供面向人类复制给 LLM Agent 的安装提示词和 agent 可读安装指南。
 - 提供 Windows PowerShell 与 macOS/Linux shell 安装脚本，默认从 GitHub Release 下载预编译二进制并安装到用户本地全局命令目录。
 - 安装脚本必须把 `xushi` 和 `xushi-daemon` 配置为用户级全局命令。
@@ -68,6 +68,7 @@
 - 项目采用 MIT License 开源。
 - 提供贡献指南、安全策略、Issue 模板和 PR 模板，降低外部协作成本。
 - daemon 启动后必须自动扫描到期任务和未确认跟进，不能依赖用户手动执行 `tick`。
+- daemon 后台调度循环必须输出可观察的启动日志；有触发或跟进创建时应输出 tick 摘要，避免调度器静默导致 agent 无法判断是否运行。
 - 支持确认运行记录已完成，确认后停止后续跟进提醒。
 - 支持按任务、状态、活跃状态和条数过滤运行记录，便于 agent 找到真正需要处理的 run。
 - 支持按任务确认最近一次待确认主运行记录，避免 agent 先查询大量 run 再手动筛选 run_id。
@@ -75,6 +76,7 @@
 - `xushi-skills` 必须明确喝水、起立、伸展、眼休息等健康习惯默认使用 completion anchor，并引导 agent 优先使用全局免打扰策略处理夜间投递，同时记录真实使用中发生的优化反馈草稿。
 - 支持查看通知投递历史，包含系统通知成功、失败和 fallback 记录。
 - 支持查看 delivery 历史，包含 pending、delayed、digested、delivered、failed、skipped、silenced 和 cancelled 状态。
+- 支持在修复 executor token、URL、TLS 或 agent 路由配置后，手动重试仍对应未完成 run 的失败 delivery；重试必须保留原失败 delivery 作为审计历史。
 
 ## 4. v1 任务语义
 
@@ -136,3 +138,4 @@
 | 2026-05-10 | 明确 | 细化安装后配置流程，要求 agent 重点检查 token 作用域、daemon 重启、executor id、hook URL 可达性和渠道投递结果。 |
 | 2026-05-10 | 调整 | `xushi-skills` 从独立 Release zip 调整为随 `xushi` 应用打包，通过 `xushi skills install/status` 安装和检查，不再发布 `xushi-skills.zip`。 |
 | 2026-05-10 | 调整 | OpenClaw 插件从独立 Release zip 调整为随 `xushi` 应用打包，通过 `xushi plugins install/status` 安装和检查，并保留 ClawHub 发布入口。 |
+| 2026-05-10 | 明确 | 安装诊断需要覆盖 OpenClaw/Hermes token 作用域、TLS URL、agent 路由和修复后失败投递重试。 |

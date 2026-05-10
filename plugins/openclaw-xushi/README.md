@@ -11,6 +11,7 @@
 - `xushi_trigger_task`：手动触发任务。
 - `xushi_list_runs`：列出运行记录，支持按任务、状态、活跃状态和条数过滤。
 - `xushi_list_deliveries`：列出投递计划，查看提醒是否被免打扰延迟、聚合、跳过或投递。
+- `xushi_retry_deliveries`：重试仍需要投递的失败记录。
 - `xushi_confirm_run`：确认运行记录已完成，停止后续跟进。
 - `xushi_confirm_latest_run`：确认某任务最近一次待确认主运行记录。
 - `xushi_callback_run`：提交长任务最终结果。
@@ -76,10 +77,11 @@ OpenClaw config 可覆盖：
 }
 ```
 
-必须满足两点：
+必须满足：
 
 1. OpenClaw Gateway 已启用 hooks，并且运行 `xushi-daemon` 的环境里有 `OPENCLAW_HOOKS_TOKEN`。
 2. 创建提醒任务时在 `task.action.executor_id` 中引用该执行器，例如 `"executor_id": "openclaw"`。
+3. 如果前几次投递因为 token、URL、TLS 或 `agent_id` 配置失败，修复配置并重启 daemon 后调用 `xushi_retry_deliveries` 或 `xushi retry-deliveries`。
 
 没有 `executor_id` 的 `reminder` 只会走本地系统通知，适合桌面环境，不适合无桌面的服务器。
 

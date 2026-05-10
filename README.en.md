@@ -153,6 +153,14 @@ Hermes:
 
 Use environment variables for tokens. Do not store real secrets in task JSON, sample files, or commits.
 
+There are two separate token directions: the OpenClaw plugin uses `XUSHI_API_TOKEN` when calling the xushi API, while `xushi-daemon` uses `OPENCLAW_HOOKS_TOKEN` when calling OpenClaw hooks. The hook token must be present in the daemon process environment. If OpenClaw Gateway uses HTTPS, set the executor `webhook_url` to `https://...`; use `"insecure_tls": true` only for local self-signed TLS. Set `agent_id` when reminders must route to the current working agent instead of OpenClaw's default agent/session.
+
+After fixing executor token, URL, TLS, or route settings and restarting the daemon, retry failed deliveries with:
+
+```powershell
+xushi retry-deliveries
+```
+
 Useful run APIs for agents:
 
 ```http
