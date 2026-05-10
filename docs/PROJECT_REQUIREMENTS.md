@@ -50,6 +50,9 @@
 - 安装脚本必须把 `xushi` 和 `xushi-daemon` 配置为用户级全局命令。
 - 安装指南必须优先说明 OpenClaw 插件、OpenClaw `/hooks/agent` executor 和 Hermes agent webhook 配置。
 - 提供 `xushi-skills` 任务类型指南包，帮助 agent 判断任务类型、生成任务 schema、配置跟进策略并在需求不明确时追问用户。
+- 安装指南必须要求 agent 在安装前询问用户是否安装 `xushi-skills`，并明确强烈推荐安装；用户同意后应通过静默参数完成安装，不在脚本执行中二次追问。
+- 安装指南必须要求 agent 在配置完成后与用户互动，发送真实测试提醒并确认目标渠道能够正常收到消息，不能只以 `xushi doctor` 作为安装完成标准。
+- 安装后的配置引导必须突出易错点：agent/plugin 环境变量作用域、本地 token 是否同步、`xushi-daemon` 是否重启、executor id 是否与 `action.executor_id` 精确匹配、hook URL 是否可从 daemon 访问，以及 OpenClaw/Hermes 渠道路由是否真正送达用户。
 - 安装脚本必须支持通过显式参数安装辅助 skill 目标；当前仅支持 `openclaw` 和 `hermes`。文档不得再提供 Codex skill 安装目标。
 - 安装脚本必须允许 agent 通过 `XUSHI_OPENCLAW_SKILLS_DIR` / `XUSHI_HERMES_SKILLS_DIR` 或已有的 `OPENCLAW_SKILLS_DIR` / `HERMES_SKILLS_DIR` 指定自定义 skills 根目录，避免不同 agent 目录调整后安装到错误位置。
 - 默认不得未经用户授权修改 agent 工具配置。
@@ -128,3 +131,5 @@
 | 2026-05-10 | 更正 | 明确安装文档优先适配 OpenClaw 和 Hermes；暂时移除 Codex skill 安装目标，仅保留 OpenClaw/Hermes skills 安装。 |
 | 2026-05-10 | 明确 | `xushi-skills` 安装支持 OpenClaw/Hermes 自定义 skills 根目录，兼容 agent 自有目录环境变量。 |
 | 2026-05-10 | 调整 | 免打扰从 schedule 层调整为 delivery 层通用策略，支持全局默认、任务覆盖、工作日窗口和摘要聚合。 |
+| 2026-05-10 | 明确 | 安装引导必须在安装前强烈推荐并询问是否安装 `xushi-skills`，并在配置完成后通过用户确认的测试提醒验证投递链路。 |
+| 2026-05-10 | 明确 | 细化安装后配置流程，要求 agent 重点检查 token 作用域、daemon 重启、executor id、hook URL 可达性和渠道投递结果。 |

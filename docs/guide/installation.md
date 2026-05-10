@@ -31,7 +31,15 @@ You are helping the user install and configure xushi, a local-first scheduler fo
 
 Tell the user that xushi will be installed from GitHub Releases into `~/.xushi/bin`, configured as a global command, initialized with a local API token, and verified with `xushi doctor`. The daemon listens on `127.0.0.1` by default.
 
-Also make the integration priority explicit: xushi prioritizes OpenClaw and Hermes. The normal path is installing xushi, then configuring the OpenClaw plugin and `/hooks/agent` executor or the Hermes agent webhook. Do not install skills unless the user agrees.
+Also make the integration priority explicit: xushi prioritizes OpenClaw and Hermes. The normal path is installing xushi, then configuring the OpenClaw plugin and `/hooks/agent` executor or the Hermes agent webhook.
+
+Before running the installer, ask the user whether to install `xushi-skills`. This is strongly recommended for agent users because it teaches agents how to choose task types, ask clarification questions, configure quiet policy, and record useful feedback. Do not install skills unless the user agrees; after consent, use the non-interactive installer parameter instead of asking again during installation.
+
+Suggested wording:
+
+```text
+是否同时安装 xushi-skills？强烈推荐安装。它会帮助 OpenClaw/Hermes 更准确地理解序时的任务类型、免打扰策略和确认流程。安装脚本可以通过参数静默完成，不会在安装过程中再次打断你。
+```
 
 ### Step 1: Check prerequisites
 
@@ -74,7 +82,7 @@ Optional environment variables:
 | `XUSHI_OPENCLAW_SKILLS_DIR` | Optional OpenClaw skills root override; if unset, the installer also honors `OPENCLAW_SKILLS_DIR`; default is `${OPENCLAW_HOME:-~/.openclaw}/skills` |
 | `XUSHI_HERMES_SKILLS_DIR` | Optional Hermes skills root override; if unset, the installer also honors `HERMES_SKILLS_DIR`; default is `${HERMES_HOME:-~/.hermes}/skills` |
 
-Do not install skills without the user's permission. Ask a short question before setting this option, for example: "是否同时为 OpenClaw/Hermes 安装 xushi-skills 任务类型指南？"
+Do not install skills without the user's permission. Ask before setting this option, and make the recommendation explicit. If the user agrees, set `XUSHI_INSTALL_AGENT_SKILLS=openclaw,hermes` or pass `--agent-skills openclaw,hermes`; if the user declines, continue installing xushi itself without skills.
 
 Use these targets:
 
@@ -146,13 +154,47 @@ Invoke-RestMethod http://127.0.0.1:18766/api/v1/health
 
 ### Step 5: Configure agent integration
 
-Read the token printed by `xushi init --show-token` or from the local config file. Set it as `XUSHI_API_TOKEN` in the agent environment and use:
+Do this slowly and verify each boundary. Most failed installations are not caused by the xushi binary; they are caused by token scope, daemon restart, wrong executor ids, or hook URLs that are reachable from the user shell but not from the daemon process.
+
+#### 5.1 Capture the local xushi connection
+
+Run:
+
+```bash
+xushi doctor
+```
+
+Use the reported base URL and local token:
 
 ```text
 XUSHI_BASE_URL=http://127.0.0.1:18766
+XUSHI_API_TOKEN=<token from ~/.xushi/config.json or xushi init --show-token>
 ```
 
-For OpenClaw, use the plugin in `plugins/openclaw-xushi` and configure `tokenEnv` as `XUSHI_API_TOKEN`.
+Common mistakes to avoid:
+
+- Do not paste the full token into public logs, issues, or chat transcripts.
+- If `xushi init --force` or a reinstall changed the token, update the agent/plugin environment too.
+- `401 Unauthorized` usually means the agent process cannot see `XUSHI_API_TOKEN`, or it is using an old token.
+- If the agent runs in a container, VM, or remote workspace, `127.0.0.1` may refer to the agent environment, not the user's machine. In that case, use a reachable local network address only if the user explicitly accepts the security tradeoff.
+
+#### 5.2 Configure the agent-side client
+
+For OpenClaw, install or enable the OpenClaw plugin in `plugins/openclaw-xushi`, set its base URL to `XUSHI_BASE_URL`, and configure `tokenEnv` as `XUSHI_API_TOKEN`.
+
+Pay attention to where environment variables live:
+
+- `XUSHI_API_TOKEN` must be visible to the OpenClaw or Hermes process that calls xushi.
+- Setting the variable in a temporary terminal is not enough if the agent app was already running.
+- After changing agent environment variables, restart or reload that agent integration before testing.
+
+#### 5.3 Configure one delivery executor first
+
+Pick one target first, usually OpenClaw. Do not configure OpenClaw, Hermes, and webhook delivery all at once before one smoke test works.
+
+Reminder tasks only use an agent delivery path when `action.executor_id` exactly matches an enabled executor id from `xushi executors`. If the field is missing or misspelled, the reminder falls back to local system notification instead of OpenClaw/Hermes.
+
+#### 5.4 OpenClaw executor checklist
 
 If reminders should be delivered back into OpenClaw, enable OpenClaw hooks and configure an executor in `~/.xushi/config.json`. Prefer passing OpenClaw hook secrets through the daemon environment instead of storing them in xushi task or executor JSON:
 
@@ -160,7 +202,7 @@ If reminders should be delivered back into OpenClaw, enable OpenClaw hooks and c
 export OPENCLAW_HOOKS_TOKEN="<local-openclaw-hooks-token>"
 ```
 
-Then edit the `executors` array so the OpenClaw executor points directly at OpenClaw `/hooks/agent`. Restart `xushi-daemon` after editing the file.
+Then edit the `executors` array so the OpenClaw executor points directly at OpenClaw `/hooks/agent`:
 
 ```json
 {
@@ -185,6 +227,17 @@ Then edit the `executors` array so the OpenClaw executor points directly at Open
 }
 ```
 
+Check these details before testing:
+
+- `token_env` is the environment variable name, not the secret value.
+- `OPENCLAW_HOOKS_TOKEN` must be present in the `xushi-daemon` process environment.
+- `webhook_url` must be reachable from the machine/process running `xushi-daemon`.
+- If OpenClaw uses local HTTPS with a self-signed certificate, either use HTTP for local setup or explicitly set `insecure_tls: true` only after the user understands the tradeoff.
+- Keep `deliver: true` when the expected result is a chat/channel message.
+- Set `channel`, `to`, `agent_id`, and `wake_mode` to match the user's real OpenClaw setup, not just the example.
+
+#### 5.5 Hermes executor checklist
+
 For Hermes, configure a local HTTP agent webhook. The `message_field` option controls which field receives the generated prompt.
 
 ```json
@@ -207,9 +260,109 @@ For Hermes, configure a local HTTP agent webhook. The `message_field` option con
 }
 ```
 
-Reminder tasks must set `action.executor_id` to the configured executor id, such as `openclaw` or `hermes`.
+Check these details before testing:
 
-Use `xushi executors` to confirm what the daemon loaded from `config.json`.
+- `message_field` must match the field Hermes expects, commonly `prompt` or `message`.
+- `HERMES_API_TOKEN` must be present in the `xushi-daemon` process environment.
+- `conversation_id`, `channel`, and `deliver` must match how Hermes routes messages to the user.
+- If Hermes accepts the HTTP request but the user sees nothing, inspect Hermes routing/channel settings before changing xushi task schema.
+
+#### 5.6 Restart and verify what xushi actually loaded
+
+Restart `xushi-daemon` after editing `~/.xushi/config.json` or changing hook-token environment variables. Then run:
+
+```bash
+xushi executors
+```
+
+Expected result:
+
+- The chosen executor id, such as `openclaw` or `hermes`, appears in the output.
+- `enabled` is `true`.
+- The executor kind and mode match the intended target.
+
+If the output still shows old values, the daemon probably read a different config file or was not restarted. Re-check `xushi doctor` for `config_path` and restart the daemon from the same environment that contains the hook token variables.
+
+### Step 6: Run an interactive delivery check
+
+Configuration is not complete until the user confirms that a real test message can be delivered through the same path they will use in daily life.
+
+#### 6.1 Confirm daemon and plugin connectivity
+
+If OpenClaw plugin tools are available, call `xushi_health` first. If using raw HTTP, call:
+
+```bash
+curl http://127.0.0.1:18766/api/v1/health
+```
+
+If health fails, fix daemon startup, host, port, or network reachability before creating any task.
+
+#### 6.2 Send one smoke-test reminder
+
+Create a unique ASAP reminder and set `action.executor_id` to the executor being tested. Do not omit this field when testing OpenClaw/Hermes delivery.
+
+With OpenClaw plugin tools, call `xushi_create_task` with this shape:
+
+```json
+{
+  "title": "序时投递测试",
+  "schedule": {
+    "kind": "asap",
+    "timezone": "Asia/Shanghai"
+  },
+  "action": {
+    "type": "reminder",
+    "executor_id": "openclaw",
+    "payload": {
+      "message": "这是一条序时安装后的投递测试。如果你看到它，请告诉 agent 已收到。"
+    }
+  },
+  "follow_up_policy": {
+    "requires_confirmation": false
+  },
+  "tags": ["setup-smoke-test"],
+  "created_by": "agent"
+}
+```
+
+For Hermes, change only `action.executor_id` to the Hermes executor id, usually `hermes`.
+
+If no agent executor is configured yet, omit `executor_id` and verify that the local notification or Web console entry appears.
+
+#### 6.3 Ask the user to confirm receipt
+
+Ask exactly one clear question:
+
+```text
+我刚刚发送了一条序时测试提醒。你是否已经在目标渠道收到这条消息？
+```
+
+Only call the installation successful after the user confirms receipt.
+
+#### 6.4 Debug by layer when the user did not receive it
+
+Run:
+
+```bash
+xushi doctor
+xushi executors
+xushi runs --active-only --limit 10
+xushi deliveries
+xushi notifications
+```
+
+Read the result by layer:
+
+- `xushi doctor` fails: local config, database path, token, or port is wrong.
+- `xushi_health` or HTTP health fails from the agent: the agent cannot reach the daemon.
+- Task is created but `xushi executors` does not show the expected executor: config file path is wrong or daemon was not restarted.
+- Delivery is `delayed`: quiet policy is working; check `deliver_at` in `xushi deliveries`.
+- Delivery is `failed`: inspect the delivery error and executor hook token/URL.
+- Notification appears but the user saw no chat message: the OpenClaw/Hermes hook may have accepted the request but failed to route it to the configured channel.
+- Local notification appears instead of OpenClaw/Hermes: `action.executor_id` was missing or did not exactly match an enabled executor id.
+- Repeated smoke tests reuse an old task: add a unique title or `idempotency_key` for each setup attempt.
+
+Fix the failing layer, restart `xushi-daemon` if config or environment changed, and send one new smoke-test reminder. Do not mark setup complete until the user confirms receipt.
 
 ### Notes
 

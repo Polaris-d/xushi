@@ -38,7 +38,7 @@ Install and configure xushi by following the instructions here:
 https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/docs/guide/installation.md
 ```
 
-The agent will read the guide, check the local environment, download xushi from GitHub Releases, initialize a local token, and tell you how to start `xushi-daemon`.
+The agent will read the guide, check the local environment, download xushi from GitHub Releases, initialize a local token, and tell you how to start `xushi-daemon`. Before installation, the agent should ask whether to install `xushi-skills`; this is strongly recommended because it helps OpenClaw/Hermes understand task types, quiet policy, and confirmation flows. After configuration, the agent should send a test reminder and wait for you to confirm that the target channel received it.
 
 ## Direct Install
 
@@ -58,13 +58,15 @@ curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scr
 
 xushi prioritizes OpenClaw and Hermes integration. After installing xushi, configure the `plugins/openclaw-xushi` plugin, the OpenClaw `/hooks/agent` executor, or the Hermes agent webhook so reminders can flow back into agents and chat channels.
 
-Optional: if the user also wants the task-type guide installed, set `XUSHI_INSTALL_AGENT_SKILLS=openclaw,hermes`. This installs the same `xushi-skills` package into the OpenClaw and Hermes skills directories:
+Strongly recommended: before installation, ask the user whether to install the task-type guide. After the user agrees, set `XUSHI_INSTALL_AGENT_SKILLS=openclaw,hermes` for non-interactive installation. The script should not ask again while running. This installs the same `xushi-skills` package into the OpenClaw and Hermes skills directories:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_INSTALL_AGENT_SKILLS=openclaw,hermes sh
 ```
 
 If your OpenClaw or Hermes skills directory is customized, set `XUSHI_OPENCLAW_SKILLS_DIR` / `XUSHI_HERMES_SKILLS_DIR` to the skills root. The installer also honors existing `OPENCLAW_SKILLS_DIR` / `HERMES_SKILLS_DIR` variables.
+
+After installing xushi and configuring an executor, ask the agent to send a real test reminder and confirm with the user that the message arrived in OpenClaw, Hermes, or the target chat channel. `xushi doctor` proves the local config is readable; the test reminder proves the delivery path works.
 
 ## Why xushi
 

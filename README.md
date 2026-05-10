@@ -40,7 +40,7 @@ Install and configure xushi by following the instructions here:
 https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/docs/guide/installation.md
 ```
 
-Agent 会读取安装指南，检查你的系统环境，从 GitHub Release 下载序时，初始化本地 token，并告诉你如何启动 `xushi-daemon`。
+Agent 会读取安装指南，检查你的系统环境，从 GitHub Release 下载序时，初始化本地 token，并告诉你如何启动 `xushi-daemon`。安装前 agent 应询问你是否同时安装 `xushi-skills`；这项强烈推荐开启，因为它能帮助 OpenClaw/Hermes 更准确地理解任务类型、免打扰策略和确认流程。配置完成后，agent 还应发送一条测试提醒，并等待你确认目标渠道确实收到了消息。
 
 ## 直接安装
 
@@ -66,7 +66,7 @@ curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scr
 
 序时优先适配 OpenClaw 和 Hermes。安装后建议优先配置 `plugins/openclaw-xushi` 插件、OpenClaw `/hooks/agent` executor，或 Hermes agent webhook，把提醒投递回 agent 和聊天渠道。
 
-可选：如果用户希望同时安装任务类型指南，可以设置 `XUSHI_INSTALL_AGENT_SKILLS=openclaw,hermes`。这会把同一套 `xushi-skills` 安装到 OpenClaw 和 Hermes 各自的 skills 目录：
+强烈推荐：安装前请先询问用户是否同时安装任务类型指南。得到用户同意后，可以设置 `XUSHI_INSTALL_AGENT_SKILLS=openclaw,hermes` 静默安装，不要在脚本执行中再次追问。这会把同一套 `xushi-skills` 安装到 OpenClaw 和 Hermes 各自的 skills 目录：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_INSTALL_AGENT_SKILLS=openclaw,hermes sh
@@ -80,6 +80,8 @@ Windows PowerShell：
 $env:XUSHI_INSTALL_AGENT_SKILLS = "openclaw,hermes"
 irm https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.ps1 | iex
 ```
+
+安装与 executor 配置完成后，请让 agent 发一条真实测试提醒，并让用户确认是否已在 OpenClaw、Hermes 或目标聊天渠道收到消息。`xushi doctor` 只证明本地配置可读，测试提醒才证明投递链路真的通了。
 
 ## 为什么做序时
 

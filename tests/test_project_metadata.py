@@ -18,6 +18,8 @@ def test_readme_has_github_friendly_install_entrypoints() -> None:
     ) in readme
     assert "scripts/install.ps1" in readme
     assert "scripts/install.sh" in readme
+    assert "强烈推荐开启" in readme
+    assert "测试提醒" in readme
 
 
 def test_license_is_mit_for_open_source_distribution() -> None:
@@ -42,7 +44,17 @@ def test_installation_guide_is_agent_readable() -> None:
     assert "HERMES_SKILLS_DIR" in guide
     assert "--openclaw-skills-dir" in guide
     assert "--hermes-skills-dir" in guide
+    assert "strongly recommended" in guide
+    assert "是否同时安装 xushi-skills" in guide
+    assert "Run an interactive delivery check" in guide
+    assert "我刚刚发送了一条序时测试提醒" in guide
+    assert "Common mistakes to avoid" in guide
+    assert "action.executor_id" in guide
+    assert "Restart `xushi-daemon`" in guide
+    assert "Delivery is `delayed`" in guide
+    assert "401 Unauthorized" in guide
     assert "xushi doctor" in guide
+    assert "xushi deliveries" in guide
 
 
 def test_install_scripts_use_safe_defaults() -> None:
