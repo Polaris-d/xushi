@@ -1,5 +1,7 @@
 param(
-    [string] $AgentSkills = $env:XUSHI_INSTALL_AGENT_SKILLS
+    [string] $AgentSkills = $env:XUSHI_INSTALL_AGENT_SKILLS,
+    [string] $OpenClawSkillsDir = $env:XUSHI_OPENCLAW_SKILLS_DIR,
+    [string] $HermesSkillsDir = $env:XUSHI_HERMES_SKILLS_DIR
 )
 
 $ErrorActionPreference = "Stop"
@@ -67,19 +69,18 @@ function Install-Binary {
     Move-Item -Force -Path $temp -Destination $target
 }
 
-function Install-XushiSkillsForCodex {
-    $codexHome = $env:CODEX_HOME
-    if (-not $codexHome) {
-        $codexHome = Join-Path $env:USERPROFILE ".codex"
-    }
-    $skillsDir = Join-Path $codexHome "skills"
+function Install-XushiSkillsPackage {
+    param(
+        [string] $Name,
+        [string] $SkillsDir
+    )
     $target = Join-Path $skillsDir "xushi-skills"
     $tempDir = Join-Path $skillsDir ".xushi-skills-download"
     $archive = Join-Path $skillsDir "xushi-skills.zip"
     $timestamp = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
     $url = Get-ReleaseUrl "xushi-skills.zip"
 
-    Write-Host "Installing xushi-skills for Codex"
+    Write-Host "Installing xushi-skills for $Name"
     New-Item -ItemType Directory -Force -Path $skillsDir | Out-Null
     if (Test-Path $tempDir) {
         Remove-Item -Recurse -Force -LiteralPath $tempDir
@@ -98,13 +99,44 @@ function Install-XushiSkillsForCodex {
     Remove-Item -Force -LiteralPath $archive
 }
 
+function Install-XushiSkillsForOpenClaw {
+    $skillsDir = $OpenClawSkillsDir
+    if (-not $skillsDir) {
+        $skillsDir = $env:OPENCLAW_SKILLS_DIR
+    }
+    if (-not $skillsDir) {
+        $openclawHome = $env:OPENCLAW_HOME
+        if (-not $openclawHome) {
+            $openclawHome = Join-Path $env:USERPROFILE ".openclaw"
+        }
+        $skillsDir = Join-Path $openclawHome "skills"
+    }
+    Install-XushiSkillsPackage "OpenClaw" $skillsDir
+}
+
+function Install-XushiSkillsForHermes {
+    $skillsDir = $HermesSkillsDir
+    if (-not $skillsDir) {
+        $skillsDir = $env:HERMES_SKILLS_DIR
+    }
+    if (-not $skillsDir) {
+        $hermesHome = $env:HERMES_HOME
+        if (-not $hermesHome) {
+            $hermesHome = Join-Path $env:USERPROFILE ".hermes"
+        }
+        $skillsDir = Join-Path $hermesHome "skills"
+    }
+    Install-XushiSkillsPackage "Hermes" $skillsDir
+}
+
 function Install-AgentSkills {
     if (-not $AgentSkills) {
         return
     }
     foreach ($target in ($AgentSkills -split ",")) {
         switch ($target.Trim().ToLowerInvariant()) {
-            "codex" { Install-XushiSkillsForCodex }
+            "openclaw" { Install-XushiSkillsForOpenClaw }
+            "hermes" { Install-XushiSkillsForHermes }
             "" { }
             default { throw "Unsupported XUSHI_INSTALL_AGENT_SKILLS target: $target" }
         }

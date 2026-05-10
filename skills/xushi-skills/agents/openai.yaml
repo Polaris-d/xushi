@@ -1,7 +1,0 @@
-interface:
-  display_name: "Xushi Skills"
-  short_description: "Create correct xushi tasks and record feedback"
-  default_prompt: "Use $xushi-skills to turn my reminder request into a correct xushi task and record real xushi feedback when usage reveals an issue."
-
-policy:
-  allow_implicit_invocation: true
