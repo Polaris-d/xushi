@@ -27,11 +27,11 @@
   <img alt="agent first" src="https://img.shields.io/badge/agent--first-local%20scheduler-111827">
 </p>
 
-xushi gives OpenClaw, Hermes, Claude Code, Cursor, and other agent tools a local daemon for schedules, reminders, compensation, follow-ups, and auditable run logs. Agents can create structured tasks without staying alive themselves.
+xushi is a local daemon for schedules, reminders, compensation, follow-ups, and auditable run logs, with priority support for OpenClaw and Hermes. It also works with Claude Code, Cursor, and other agent tools through the same local API and executor model.
 
 ## Human-Friendly Install
 
-Paste this prompt into your LLM agent, such as Claude Code, AmpCode, Cursor, or OpenClaw:
+Paste this prompt into your LLM agent. If you use OpenClaw or Hermes, prefer running it from that integration environment:
 
 ```text
 Install and configure xushi by following the instructions here:
@@ -56,11 +56,15 @@ macOS / Linux:
 curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | sh
 ```
 
-If the agent has already asked for permission, it can silently install `xushi-skills` for Codex as part of the same install:
+xushi prioritizes OpenClaw and Hermes integration. After installing xushi, configure the `plugins/openclaw-xushi` plugin, the OpenClaw `/hooks/agent` executor, or the Hermes agent webhook so reminders can flow back into agents and chat channels.
+
+Optional: if the user also wants the task-type guide installed, set `XUSHI_INSTALL_AGENT_SKILLS=openclaw,hermes`. This installs the same `xushi-skills` package into the OpenClaw and Hermes skills directories:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_INSTALL_AGENT_SKILLS=codex sh
+curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_INSTALL_AGENT_SKILLS=openclaw,hermes sh
 ```
+
+If your OpenClaw or Hermes skills directory is customized, set `XUSHI_OPENCLAW_SKILLS_DIR` / `XUSHI_HERMES_SKILLS_DIR` to the skills root. The installer also honors existing `OPENCLAW_SKILLS_DIR` / `HERMES_SKILLS_DIR` variables.
 
 ## Why xushi
 
@@ -165,9 +169,9 @@ xushi never upgrades silently. Run upgrades explicitly:
 
 ```powershell
 xushi upgrade status
-xushi upgrade check --version v0.1.3
+xushi upgrade check --version v0.1.4
 xushi upgrade backup
-xushi upgrade apply --version v0.1.3 --yes
+xushi upgrade apply --version v0.1.4 --yes
 xushi upgrade rollback
 ```
 

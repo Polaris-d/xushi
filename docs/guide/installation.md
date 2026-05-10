@@ -2,7 +2,7 @@
 
 ## 给人类看的
 
-复制并粘贴以下提示词到你的 LLM Agent，例如 Claude Code、AmpCode、Cursor、OpenClaw：
+复制并粘贴以下提示词到你的 LLM Agent；如果你使用 OpenClaw 或 Hermes，优先从它们的集成环境里执行：
 
 ```text
 Install and configure xushi by following the instructions here:
@@ -30,6 +30,8 @@ You are helping the user install and configure xushi, a local-first scheduler fo
 ### Step 0: Explain what will happen
 
 Tell the user that xushi will be installed from GitHub Releases into `~/.xushi/bin`, configured as a global command, initialized with a local API token, and verified with `xushi doctor`. The daemon listens on `127.0.0.1` by default.
+
+Also make the integration priority explicit: xushi prioritizes OpenClaw and Hermes. The normal path is installing xushi, then configuring the OpenClaw plugin and `/hooks/agent` executor or the Hermes agent webhook. Do not install skills unless the user agrees.
 
 ### Step 1: Check prerequisites
 
@@ -65,24 +67,49 @@ Optional environment variables:
 
 | Variable | Purpose |
 | --- | --- |
-| `XUSHI_VERSION` | Release tag to install, for example `v0.1.2`; default is latest |
+| `XUSHI_VERSION` | Release tag to install, for example `v0.1.4`; default is latest |
 | `XUSHI_BIN_DIR` | Binary install directory; default is `~/.xushi/bin` |
 | `XUSHI_REPO_SLUG` | GitHub repository slug; default is `Polaris-d/xushi` |
-| `XUSHI_INSTALL_AGENT_SKILLS` | Optional comma-separated agent skill targets; currently supports `codex` |
+| `XUSHI_INSTALL_AGENT_SKILLS` | Optional comma-separated auxiliary skill targets; currently supports `openclaw` and `hermes` |
+| `XUSHI_OPENCLAW_SKILLS_DIR` | Optional OpenClaw skills root override; if unset, the installer also honors `OPENCLAW_SKILLS_DIR`; default is `${OPENCLAW_HOME:-~/.openclaw}/skills` |
+| `XUSHI_HERMES_SKILLS_DIR` | Optional Hermes skills root override; if unset, the installer also honors `HERMES_SKILLS_DIR`; default is `${HERMES_HOME:-~/.hermes}/skills` |
 
-If the user agrees before installation, install xushi and xushi-skills for Codex in one non-interactive command.
+Do not install skills without the user's permission. Ask a short question before setting this option, for example: "是否同时为 OpenClaw/Hermes 安装 xushi-skills 任务类型指南？"
+
+Use these targets:
+
+- `openclaw`: installs into `${OPENCLAW_HOME:-~/.openclaw}/skills/xushi-skills`.
+- `hermes`: installs into `${HERMES_HOME:-~/.hermes}/skills/xushi-skills`.
+
+If the user's OpenClaw or Hermes skills directory has been customized, use `XUSHI_OPENCLAW_SKILLS_DIR` or `XUSHI_HERMES_SKILLS_DIR` before running the installer. If an agent environment already exposes `OPENCLAW_SKILLS_DIR` or `HERMES_SKILLS_DIR`, the installer will honor those too. The directory value should be the skills root, not the agent home; the installer creates or replaces the `xushi-skills` child folder inside it.
+
+If the user agrees, install xushi and `xushi-skills` for OpenClaw/Hermes in one non-interactive command.
 
 Windows PowerShell:
 
 ```powershell
-$env:XUSHI_INSTALL_AGENT_SKILLS = "codex"
+$env:XUSHI_INSTALL_AGENT_SKILLS = "openclaw,hermes"
+$env:XUSHI_OPENCLAW_SKILLS_DIR = "D:\Agents\OpenClaw\skills"
+$env:XUSHI_HERMES_SKILLS_DIR = "D:\Agents\Hermes\skills"
 irm https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.ps1 | iex
 ```
 
 macOS / Linux:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_INSTALL_AGENT_SKILLS=codex sh
+curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_INSTALL_AGENT_SKILLS=openclaw,hermes sh
+```
+
+With custom skills directories:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_INSTALL_AGENT_SKILLS=openclaw,hermes XUSHI_OPENCLAW_SKILLS_DIR="$HOME/agents/openclaw-skills" XUSHI_HERMES_SKILLS_DIR="$HOME/agents/hermes-skills" sh
+```
+
+The shell installer also accepts explicit arguments, which can be easier for agents to compose safely:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | sh -s -- --agent-skills openclaw,hermes --openclaw-skills-dir "$HOME/agents/openclaw-skills" --hermes-skills-dir "$HOME/agents/hermes-skills"
 ```
 
 ### Step 3: Verify setup
@@ -95,7 +122,7 @@ xushi doctor
 
 The installer also runs `xushi init --show-token` and `xushi doctor` by absolute path immediately after downloading the binaries.
 
-If `XUSHI_INSTALL_AGENT_SKILLS=codex` was provided, verify that `xushi-skills` exists under `$CODEX_HOME/skills/xushi-skills` or `~/.codex/skills/xushi-skills`.
+If `XUSHI_INSTALL_AGENT_SKILLS=openclaw,hermes` was provided, verify that `xushi-skills` exists under the configured OpenClaw and Hermes skills directories. When no override is set, check `${OPENCLAW_HOME:-~/.openclaw}/skills/xushi-skills` and `${HERMES_HOME:-~/.hermes}/skills/xushi-skills`.
 
 ### Step 4: Start daemon
 
@@ -203,7 +230,7 @@ xushi upgrade apply --yes
 For a specific release tag:
 
 ```bash
-xushi upgrade apply --version v0.1.2 --yes
+xushi upgrade apply --version v0.1.4 --yes
 ```
 
 The upgrade command creates a backup of the local config and SQLite database before replacing global command binaries from GitHub Releases. If the upgrade fails or the user wants to restore data, run:

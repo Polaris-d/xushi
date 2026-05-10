@@ -5,6 +5,8 @@ REPO_SLUG="${XUSHI_REPO_SLUG:-Polaris-d/xushi}"
 VERSION="${XUSHI_VERSION:-latest}"
 BIN_DIR="${XUSHI_BIN_DIR:-${XUSHI_INSTALL_DIR:-$HOME/.xushi/bin}}"
 AGENT_SKILLS="${XUSHI_INSTALL_AGENT_SKILLS:-}"
+OPENCLAW_SKILLS_DIR="${XUSHI_OPENCLAW_SKILLS_DIR:-${OPENCLAW_SKILLS_DIR:-}}"
+HERMES_SKILLS_DIR="${XUSHI_HERMES_SKILLS_DIR:-${HERMES_SKILLS_DIR:-}}"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -18,6 +20,30 @@ while [ "$#" -gt 0 ]; do
       ;;
     --agent-skills=*)
       AGENT_SKILLS="${1#*=}"
+      shift
+      ;;
+    --openclaw-skills-dir)
+      if [ "$#" -lt 2 ]; then
+        echo "Missing value for --openclaw-skills-dir" >&2
+        exit 1
+      fi
+      OPENCLAW_SKILLS_DIR="$2"
+      shift 2
+      ;;
+    --openclaw-skills-dir=*)
+      OPENCLAW_SKILLS_DIR="${1#*=}"
+      shift
+      ;;
+    --hermes-skills-dir)
+      if [ "$#" -lt 2 ]; then
+        echo "Missing value for --hermes-skills-dir" >&2
+        exit 1
+      fi
+      HERMES_SKILLS_DIR="$2"
+      shift 2
+      ;;
+    --hermes-skills-dir=*)
+      HERMES_SKILLS_DIR="${1#*=}"
       shift
       ;;
     *)
@@ -82,17 +108,17 @@ install_binary() {
   mv "$temp" "$target"
 }
 
-install_xushi_skills_for_codex() {
+install_xushi_skills_package() {
   require_cmd unzip
-  codex_home="${CODEX_HOME:-$HOME/.codex}"
-  skills_dir="$codex_home/skills"
+  target_name="$1"
+  skills_dir="$2"
   target="$skills_dir/xushi-skills"
   temp_dir="$skills_dir/.xushi-skills-download"
   archive="$skills_dir/xushi-skills.zip"
   url="$(release_url "xushi-skills.zip")"
   timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 
-  echo "Installing xushi-skills for Codex"
+  echo "Installing xushi-skills for $target_name"
   mkdir -p "$skills_dir"
   rm -rf "$temp_dir"
   mkdir -p "$temp_dir"
@@ -109,6 +135,22 @@ install_xushi_skills_for_codex() {
   rm -rf "$temp_dir" "$archive"
 }
 
+install_xushi_skills_for_openclaw() {
+  skills_dir="$OPENCLAW_SKILLS_DIR"
+  if [ -z "$skills_dir" ]; then
+    skills_dir="${OPENCLAW_HOME:-$HOME/.openclaw}/skills"
+  fi
+  install_xushi_skills_package "OpenClaw" "$skills_dir"
+}
+
+install_xushi_skills_for_hermes() {
+  skills_dir="$HERMES_SKILLS_DIR"
+  if [ -z "$skills_dir" ]; then
+    skills_dir="${HERMES_HOME:-$HOME/.hermes}/skills"
+  fi
+  install_xushi_skills_package "Hermes" "$skills_dir"
+}
+
 install_agent_skills() {
   if [ -z "$AGENT_SKILLS" ]; then
     return 0
@@ -118,7 +160,8 @@ install_agent_skills() {
   for target in $AGENT_SKILLS; do
     target_name="$(printf '%s' "$target" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
     case "$target_name" in
-      codex) install_xushi_skills_for_codex ;;
+      openclaw) install_xushi_skills_for_openclaw ;;
+      hermes) install_xushi_skills_for_hermes ;;
       "")
         ;;
       *)
