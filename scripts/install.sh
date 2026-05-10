@@ -4,6 +4,28 @@ set -eu
 REPO_SLUG="${XUSHI_REPO_SLUG:-Polaris-d/xushi}"
 VERSION="${XUSHI_VERSION:-latest}"
 BIN_DIR="${XUSHI_BIN_DIR:-${XUSHI_INSTALL_DIR:-$HOME/.xushi/bin}}"
+AGENT_SKILLS="${XUSHI_INSTALL_AGENT_SKILLS:-}"
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --agent-skills)
+      if [ "$#" -lt 2 ]; then
+        echo "Missing value for --agent-skills" >&2
+        exit 1
+      fi
+      AGENT_SKILLS="$2"
+      shift 2
+      ;;
+    --agent-skills=*)
+      AGENT_SKILLS="${1#*=}"
+      shift
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      exit 1
+      ;;
+  esac
+done
 
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -60,6 +82,54 @@ install_binary() {
   mv "$temp" "$target"
 }
 
+install_xushi_skills_for_codex() {
+  require_cmd unzip
+  codex_home="${CODEX_HOME:-$HOME/.codex}"
+  skills_dir="$codex_home/skills"
+  target="$skills_dir/xushi-skills"
+  temp_dir="$skills_dir/.xushi-skills-download"
+  archive="$skills_dir/xushi-skills.zip"
+  url="$(release_url "xushi-skills.zip")"
+  timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+
+  echo "Installing xushi-skills for Codex"
+  mkdir -p "$skills_dir"
+  rm -rf "$temp_dir"
+  mkdir -p "$temp_dir"
+  curl -fL --retry 3 --connect-timeout 15 -o "$archive" "$url"
+  unzip -q "$archive" -d "$temp_dir"
+  if [ ! -f "$temp_dir/xushi-skills/SKILL.md" ]; then
+    echo "Invalid xushi-skills archive: missing SKILL.md" >&2
+    exit 1
+  fi
+  if [ -e "$target" ]; then
+    mv "$target" "$skills_dir/xushi-skills.backup-$timestamp"
+  fi
+  mv "$temp_dir/xushi-skills" "$target"
+  rm -rf "$temp_dir" "$archive"
+}
+
+install_agent_skills() {
+  if [ -z "$AGENT_SKILLS" ]; then
+    return 0
+  fi
+  old_ifs="$IFS"
+  IFS=","
+  for target in $AGENT_SKILLS; do
+    target_name="$(printf '%s' "$target" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+    case "$target_name" in
+      codex) install_xushi_skills_for_codex ;;
+      "")
+        ;;
+      *)
+        echo "Unsupported XUSHI_INSTALL_AGENT_SKILLS target: $target" >&2
+        exit 1
+        ;;
+    esac
+  done
+  IFS="$old_ifs"
+}
+
 profile_path() {
   shell_name="$(basename "${SHELL:-}")"
   if [ "$shell_name" = "zsh" ]; then
@@ -99,6 +169,7 @@ mkdir -p "$BIN_DIR"
 install_binary "xushi" "$tag"
 install_binary "xushi-daemon" "$tag"
 ensure_path_config
+install_agent_skills
 
 "$BIN_DIR/xushi" init --show-token
 "$BIN_DIR/xushi" doctor
@@ -106,5 +177,8 @@ ensure_path_config
 echo ""
 echo "xushi is installed into $BIN_DIR."
 echo "Global command path has been configured for new shells."
+if [ -n "$AGENT_SKILLS" ]; then
+  echo "Agent skills installed for: $AGENT_SKILLS"
+fi
 echo "Start daemon:"
 echo "  xushi-daemon"

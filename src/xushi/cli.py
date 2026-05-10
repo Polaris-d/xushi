@@ -205,7 +205,7 @@ def upgrade_status(
 def upgrade_check(
     version: Annotated[
         str | None,
-        typer.Option("--version", "-v", help="目标版本, 例如 v0.1.1。"),
+        typer.Option("--version", "-v", help="目标版本, 例如 v0.1.2。"),
     ] = None,
     config_path: Annotated[
         Path | None,
@@ -261,7 +261,7 @@ def upgrade_rollback(
 def upgrade_apply(
     version: Annotated[
         str | None,
-        typer.Option("--version", "-v", help="目标 tag 版本, 例如 v0.1.1。为空时下载 latest。"),
+        typer.Option("--version", "-v", help="目标 tag 版本, 例如 v0.1.2。为空时下载 latest。"),
     ] = None,
     yes: Annotated[bool, typer.Option("--yes", "-y", help="跳过确认提示。")] = False,
     allow_dirty: Annotated[
