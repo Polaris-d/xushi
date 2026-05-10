@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import socket
 from pathlib import Path
 from typing import Annotated
@@ -13,7 +12,7 @@ import typer
 from xushi.config import Settings, default_config_path, write_initial_config
 from xushi.models import Executor, TaskCreate
 from xushi.service import XushiService
-from xushi.upgrade import UpgradeError, UpgradeManager
+from xushi.upgrade import UpgradeError, UpgradeManager, default_bin_dir
 
 app = typer.Typer(help="序时 xushi 本地日程与 agent 调度工具。")
 upgrade_app = typer.Typer(help="手动安全升级序时。")
@@ -48,7 +47,7 @@ def _upgrade_manager(
     """创建升级管理器。"""
     resolved_config_path = Path(config_path) if config_path else default_config_path()
     settings = Settings.from_env(config_path=resolved_config_path)
-    resolved_install_dir = install_dir or Path(os.environ.get("XUSHI_INSTALL_DIR", Path.cwd()))
+    resolved_install_dir = install_dir or default_bin_dir()
     return UpgradeManager(
         config_path=resolved_config_path,
         database_path=settings.database_path,
@@ -195,7 +194,7 @@ def upgrade_status(
     ] = None,
     install_dir: Annotated[
         Path | None,
-        typer.Option(help="安装目录, 默认使用 XUSHI_INSTALL_DIR 或当前目录。"),
+        typer.Option(help="全局命令目录, 默认使用 XUSHI_BIN_DIR 或 ~/.xushi/bin。"),
     ] = None,
 ) -> None:
     """查看本机升级状态。"""
@@ -214,7 +213,7 @@ def upgrade_check(
     ] = None,
     install_dir: Annotated[
         Path | None,
-        typer.Option(help="安装目录, 默认使用 XUSHI_INSTALL_DIR 或当前目录。"),
+        typer.Option(help="全局命令目录, 默认使用 XUSHI_BIN_DIR 或 ~/.xushi/bin。"),
     ] = None,
 ) -> None:
     """检查指定版本是否高于当前版本。"""
@@ -229,7 +228,7 @@ def upgrade_backup(
     ] = None,
     install_dir: Annotated[
         Path | None,
-        typer.Option(help="安装目录, 默认使用 XUSHI_INSTALL_DIR 或当前目录。"),
+        typer.Option(help="全局命令目录, 默认使用 XUSHI_BIN_DIR 或 ~/.xushi/bin。"),
     ] = None,
 ) -> None:
     """手动创建升级前备份。"""
@@ -248,7 +247,7 @@ def upgrade_rollback(
     ] = None,
     install_dir: Annotated[
         Path | None,
-        typer.Option(help="安装目录, 默认使用 XUSHI_INSTALL_DIR 或当前目录。"),
+        typer.Option(help="全局命令目录, 默认使用 XUSHI_BIN_DIR 或 ~/.xushi/bin。"),
     ] = None,
 ) -> None:
     """从升级备份恢复配置和数据库。"""
@@ -262,10 +261,13 @@ def upgrade_rollback(
 def upgrade_apply(
     version: Annotated[
         str | None,
-        typer.Option("--version", "-v", help="目标 tag 版本, 例如 v0.1.1。为空时执行 git pull。"),
+        typer.Option("--version", "-v", help="目标 tag 版本, 例如 v0.1.1。为空时下载 latest。"),
     ] = None,
     yes: Annotated[bool, typer.Option("--yes", "-y", help="跳过确认提示。")] = False,
-    allow_dirty: Annotated[bool, typer.Option(help="允许安装目录存在未提交改动。")] = False,
+    allow_dirty: Annotated[
+        bool,
+        typer.Option(help="兼容旧参数; release 二进制升级不检查 git 工作区。"),
+    ] = False,
     allow_running_daemon: Annotated[
         bool,
         typer.Option(help="允许 daemon 可能运行时继续升级。"),
@@ -276,12 +278,12 @@ def upgrade_apply(
     ] = None,
     install_dir: Annotated[
         Path | None,
-        typer.Option(help="安装目录, 默认使用 XUSHI_INSTALL_DIR 或当前目录。"),
+        typer.Option(help="全局命令目录, 默认使用 XUSHI_BIN_DIR 或 ~/.xushi/bin。"),
     ] = None,
 ) -> None:
     """手动执行安全升级。"""
     if not yes:
-        message = "升级前会创建数据备份, 并修改安装目录。是否继续?"
+        message = "升级前会创建数据备份, 并替换全局命令二进制。是否继续?"
         if not typer.confirm(message):
             raise typer.Abort()
     try:

@@ -229,13 +229,59 @@ def test_openclaw_executor_rejects_non_hooks_agent_mode() -> None:
     assert result["error"] == "unsupported openclaw executor mode: command"
 
 
-def test_hermes_executor_is_reserved_not_implemented() -> None:
-    executor = Executor(id="hermes", kind="hermes", name="Hermes", config={"mode": "template"})
+def test_hermes_executor_posts_to_agent_webhook(monkeypatch) -> None:
+    server, url = _start_server()
+    monkeypatch.setenv("HERMES_API_TOKEN", "hermes-secret")
+    try:
+        executor = Executor(
+            id="hermes",
+            kind="hermes",
+            name="Hermes",
+            config={
+                "mode": "agent_webhook",
+                "webhook_url": url,
+                "token_env": "HERMES_API_TOKEN",
+                "message_field": "message",
+                "agent_id": "planner",
+                "conversation_id": "conv_1",
+                "channel": "feishu",
+            },
+        )
+        action = Action(
+            type="reminder",
+            executor_id="hermes",
+            payload={
+                "title": "整理日程",
+                "message": "今晚复盘明天计划",
+                "task_id": "task_hermes",
+            },
+        )
+
+        result = ExecutorRegistry().execute(action, executor)
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert result["delivered"] is True
+    assert result["executor"] == "hermes"
+    assert result["kind"] == "hermes"
+    assert result["mode"] == "agent_webhook"
+    assert RecordingHandler.received[0]["authorization"] == "Bearer hermes-secret"
+    body = RecordingHandler.received[0]["body"]
+    assert "整理日程" in body["message"]
+    assert "今晚复盘明天计划" in body["message"]
+    assert body["source"] == "xushi"
+    assert body["metadata"]["task_id"] == "task_hermes"
+    assert body["agent_id"] == "planner"
+    assert body["conversation_id"] == "conv_1"
+    assert body["channel"] == "feishu"
+
+
+def test_hermes_executor_requires_webhook_url() -> None:
+    executor = Executor(id="hermes", kind="hermes", name="Hermes", config={})
     action = Action(type="agent", executor_id="hermes", payload={"prompt": "整理日程"})
 
     result = ExecutorRegistry().execute(action, executor)
 
     assert result["delivered"] is False
-    assert result["executor"] == "hermes"
-    assert result["kind"] == "hermes"
-    assert result["error"] == "hermes executor reserved but not implemented"
+    assert result["error"] == "hermes agent_webhook executor missing webhook_url"

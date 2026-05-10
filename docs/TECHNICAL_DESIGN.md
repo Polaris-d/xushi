@@ -46,7 +46,7 @@ flowchart LR
 - `xushi.cli`：命令行入口。
 - `xushi.upgrade`：手动 CLI 安全升级、备份和回滚。
 - `plugins/openclaw-xushi`：OpenClaw 原生插件。
-- `xushi.executors`：OpenClaw 执行器调用；Hermes 和通用 webhook executor 暂时仅保留预留位置。
+- `xushi.executors`：OpenClaw 与 Hermes 执行器调用；通用 webhook executor 暂时仅保留预留位置。
 
 ## 4. API 设计
 
@@ -91,7 +91,9 @@ SQLite 连接按操作短连接打开并立即关闭，避免 Windows 下 daemon
 
 Executor 是本地配置，不属于运行态数据。`Settings.executors` 从 `config.json` 的 `executors` 数组加载，service 在启动时构建启用 executor 映射；修改 executor 配置后需要重启 daemon。`GET /api/v1/executors` 和 CLI `xushi executors` 只用于查看当前配置，不提供写入接口，避免 agent 在运行时把投递凭据或外部入口写入 SQLite。
 
-OpenClaw executor 是 v1 唯一实现的 agent 回传路径。`mode=hooks_agent` 时，序时将 `action.payload` 转换为 OpenClaw `/hooks/agent` 请求体，字段包括 `message`、`name`、`agentId`、`wakeMode`、`deliver`、`channel`、`to`、`model`、`fallbacks`、`thinking` 和 `timeoutSeconds`。executor config 使用 snake_case，例如 `agent_id`、`wake_mode`、`timeout_seconds`，同时兼容 OpenClaw 的 camelCase 字段。token 优先从 executor 的 `token` 读取，其次从 `token_env` 或默认环境变量 `OPENCLAW_HOOKS_TOKEN` / `OPENCLAW_WEBHOOK_TOKEN` 读取。`insecure_tls` 默认 false，只有 OpenClaw Gateway 使用本机自签名 HTTPS 时才应显式启用。Hermes 和通用 webhook executor 暂时仅保留 schema 位置，调用时返回 `reserved but not implemented`，不进行网络投递。v1 不提供 command executor，避免跨平台 shell、命令注入和环境差异扩大配置复杂度。`reminder` action 在配置 `executor_id` 时会走对应 executor；没有 `executor_id` 时才走本地系统通知。
+OpenClaw executor 使用 `mode=hooks_agent`。序时将 `action.payload` 转换为 OpenClaw `/hooks/agent` 请求体，字段包括 `message`、`name`、`agentId`、`wakeMode`、`deliver`、`channel`、`to`、`model`、`fallbacks`、`thinking` 和 `timeoutSeconds`。executor config 使用 snake_case，例如 `agent_id`、`wake_mode`、`timeout_seconds`，同时兼容 OpenClaw 的 camelCase 字段。token 优先从 executor 的 `token` 读取，其次从 `token_env` 或默认环境变量 `OPENCLAW_HOOKS_TOKEN` / `OPENCLAW_WEBHOOK_TOKEN` 读取。`insecure_tls` 默认 false，只有 OpenClaw Gateway 使用本机自签名 HTTPS 时才应显式启用。
+
+Hermes executor 使用 `mode=agent_webhook` 或兼容别名 `webhook`。序时将 `action.payload` 转换为可配置 HTTP 请求体，默认字段为 `prompt`、`source` 和 `metadata`，并支持通过 `message_field` 调整提示词字段名。Hermes config 支持 `webhook_url`、`token`、`token_env`、`token_required`、`agent_id`、`conversation_id`、`channel`、`to`、`model`、`thinking`、`deliver`、`request_timeout_seconds`、`insecure_tls` 和 `body`/`extra_body` 追加字段。token 默认从 `HERMES_API_TOKEN` 或 `HERMES_TOKEN` 读取。通用 webhook executor 暂时仅保留 schema 位置，调用时返回 `reserved but not implemented`。v1 不提供 command executor，避免跨平台 shell、命令注入和环境差异扩大配置复杂度。`reminder` action 在配置 `executor_id` 时会走对应 executor；没有 `executor_id` 时才走本地系统通知。
 
 长任务可在启动后异步回调 `POST /api/v1/runs/{id}/callback`，将运行记录更新为 `succeeded` 或 `failed`，并合并最终结果。
 
@@ -127,14 +129,14 @@ OpenClaw executor 是 v1 唯一实现的 agent 回传路径。`mode=hooks_agent`
 
 - README 使用 GitHub 项目页风格，提供徽章、价值主张、能力表格、快速安装和验证入口。
 - `docs/guide/installation.md` 提供两层安装说明：人类复制给 LLM Agent 的短提示词，以及 agent 可执行的分步安装与验证流程。
-- `scripts/install.ps1` 和 `scripts/install.sh` 默认安装到用户目录 `~/.xushi/app`，已有 Git 仓库时使用 `git pull --ff-only` 更新，随后执行 `uv sync`、`xushi init --show-token` 和 `xushi doctor`。
+- `scripts/install.ps1` 和 `scripts/install.sh` 默认从 GitHub Release 下载当前平台的 `xushi` 与 `xushi-daemon` 二进制，安装到用户目录 `~/.xushi/bin`，并配置用户级 PATH，使 `xushi` 和 `xushi-daemon` 可作为全局命令使用。脚本随后执行 `xushi init --show-token` 和 `xushi doctor`。
 - `uv build --wheel` 生成 Python wheel，适合开发者和 Python 用户安装。
 - `scripts/build_binaries.py` 通过 PyInstaller 生成 `xushi` 和 `xushi-daemon` 单文件二进制。
 - PyInstaller 构建使用 `--collect-data xushi`，确保中国节假日 JSON 等包数据被包含在二进制中。
 - `.github/workflows/build.yml` 在 Windows、macOS、Linux 上执行测试、ruff、wheel 构建和二进制构建，并上传已按平台重命名的构建产物，不上传 PyInstaller 临时 `.spec` 文件。
 - `scripts/prepare_release_assets.py` 负责将 PyInstaller 二进制重命名为 `xushi-<platform>`、`xushi-daemon-<platform>`，复制 Python wheel/sdist，并打包 OpenClaw 插件 zip。
 - `.github/workflows/release.yml` 在 `v*` tag 上先运行跨平台质量检查，再分别构建 Python 包和平台二进制，最后合并 release 资产、生成 `SHA256SUMS.txt` 并发布 GitHub Release 自动说明。
-- `xushi upgrade status/check/backup/apply/rollback` 提供用户手动触发的安全升级能力。升级器默认不做静默自动升级；`apply` 当前面向 git 安装目录，先检查 daemon 端口和工作区干净度，再备份配置和 SQLite 数据库，随后执行 `git fetch --tags --prune`、`git checkout --detach <version>` 或 `git pull --ff-only`、`uv sync`。
+- `xushi upgrade status/check/backup/apply/rollback` 提供用户手动触发的安全升级能力。升级器默认不做静默自动升级；`apply` 先检查 daemon 端口，再备份配置和 SQLite 数据库，随后从 GitHub Release 下载目标版本或 latest 的 `xushi-<platform>` 与 `xushi-daemon-<platform>`，替换用户级全局命令目录中的二进制。
 - 升级备份存放在配置目录的 `backups/upgrade-<timestamp>` 下，包含 `config.json`、通过 SQLite backup API 生成的一致性数据库快照、存在的 WAL/SHM sidecar 和 `manifest.json`。`rollback` 根据 manifest 恢复原路径，恢复主数据库前会清理现有 WAL/SHM sidecar，避免旧 sidecar 干扰恢复数据。
 - `.gitattributes` 固定 shell、Python、Markdown、YAML、JSON、TOML、TS/JS 为 LF，PowerShell 脚本为 CRLF，避免跨平台安装脚本换行损坏。
 - 项目根目录提供 MIT License，`pyproject.toml` 声明 `license = "MIT"`。
@@ -160,10 +162,12 @@ OpenClaw executor 是 v1 唯一实现的 agent 回传路径。`mode=hooks_agent`
 | 2026-05-09 | 更正 | 修复 reminder action 忽略 executor 的路由问题，并补充 OpenClaw executor 接入能力。 |
 | 2026-05-10 | 更正 | 撤回早期 command bridge 方案，避免跨平台和安全边界复杂度。 |
 | 2026-05-10 | 调整 | OpenClaw 默认投递链路从 TaskFlow webhook 调整为 `/hooks/agent`，并新增 `hooks_agent` 载荷适配。 |
-| 2026-05-10 | 调整 | 移除 command executor；Hermes 和通用 webhook executor 暂时仅返回预留未实现状态。 |
+| 2026-05-10 | 调整 | 移除 command executor；通用 webhook executor 暂时仅返回预留未实现状态。 |
 | 2026-05-10 | 明确 | 完善 OpenClaw `/hooks/agent` 可选字段映射，支持 snake_case 与 camelCase 配置别名。 |
 | 2026-05-10 | 调整 | OpenClaw HTTPS 自签名证书改为显式 `insecure_tls` 配置，默认保持 TLS 证书校验。 |
 | 2026-05-10 | 调整 | executor 配置从 SQLite/API 写入调整为 `config.json` 管理，API 和 OpenClaw 插件仅保留只读查看能力。 |
 | 2026-05-10 | 调整 | 默认 daemon 端口从 `8766` 调整为 `18766`，避开低位常见开发端口并保留旧端口记忆点。 |
 | 2026-05-10 | 调整 | 重构 GitHub Release workflow，拆分质量检查、Python 包、平台二进制和发布步骤，增加唯一资产命名、插件 zip 和 SHA256 校验和。 |
 | 2026-05-10 | 新增 | 增加手动 CLI 安全升级设计，提供 status/check/backup/apply/rollback，并在升级前使用 SQLite backup API 创建可回滚备份。 |
+| 2026-05-10 | 调整 | 安装与升级实现改为 GitHub Release 二进制下载，默认写入 `~/.xushi/bin` 并配置全局命令。 |
+| 2026-05-10 | 调整 | Hermes executor 从预留未实现升级为可配置 HTTP agent webhook 适配。 |

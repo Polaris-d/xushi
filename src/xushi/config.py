@@ -39,8 +39,8 @@ def load_config(config_path: Path | None = None) -> dict[str, Any]:
 def default_executors() -> tuple[Executor, ...]:
     """返回默认 executor 配置。
 
-    OpenClaw 是 v1 唯一实际实现的 agent 投递 executor；Hermes 和通用
-    webhook 先保留配置位置，等待后续实现。
+    OpenClaw 和 Hermes 均通过本地配置驱动的 HTTP agent webhook 投递；
+    通用 webhook 先保留配置位置，等待后续实现。
     """
     return (
         Executor(
@@ -59,7 +59,13 @@ def default_executors() -> tuple[Executor, ...]:
             id="hermes",
             kind="hermes",
             name="Hermes",
-            config={"mode": "template"},
+            config={
+                "mode": "agent_webhook",
+                "webhook_url": "http://127.0.0.1:18790/hooks/agent",
+                "token_env": "HERMES_API_TOKEN",
+                "message_field": "prompt",
+                "token_required": True,
+            },
             enabled=False,
         ),
         Executor(

@@ -5,7 +5,7 @@ import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
-from xushi.upgrade import CommandResult, UpgradeManager
+from xushi.upgrade import UpgradeManager
 
 
 def _write_database(database_path: Path, value: str) -> None:
@@ -68,45 +68,34 @@ def test_upgrade_rollback_restores_config_and_database(tmp_path) -> None:
     assert _read_database(database_path) == "original-data"
 
 
-def test_upgrade_apply_creates_backup_before_running_update_commands(tmp_path) -> None:
+def test_upgrade_apply_creates_backup_before_downloading_release_assets(tmp_path) -> None:
     config_path = tmp_path / "config.json"
     database_path = tmp_path / "xushi.db"
-    install_dir = tmp_path / "app"
-    (install_dir / ".git").mkdir(parents=True)
+    install_dir = tmp_path / "bin"
     config_path.write_text(json.dumps({"api_token": "secret"}), encoding="utf-8")
     _write_database(database_path, "before-upgrade")
-    commands: list[list[str]] = []
+    urls: list[str] = []
 
-    def fake_runner(command: list[str], cwd: Path) -> CommandResult:
-        commands.append(command)
-        if command == ["git", "status", "--porcelain"]:
-            return CommandResult(command=command, cwd=cwd, returncode=0, stdout="", stderr="")
-        if command == ["git", "rev-parse", "HEAD"]:
-            return CommandResult(
-                command=command,
-                cwd=cwd,
-                returncode=0,
-                stdout="old-ref\n",
-                stderr="",
-            )
-        return CommandResult(command=command, cwd=cwd, returncode=0, stdout="", stderr="")
+    def fake_downloader(url: str, target: Path) -> None:
+        urls.append(url)
+        target.write_text(url, encoding="utf-8")
 
     manager = UpgradeManager(
         config_path=config_path,
         database_path=database_path,
         state_dir=tmp_path,
         install_dir=install_dir,
-        command_runner=fake_runner,
+        platform_tag="linux-x64",
+        downloader=fake_downloader,
     )
 
     result = manager.apply(target_version="v0.1.1", allow_running_daemon=True)
 
     assert result.status == "succeeded"
     assert (tmp_path / "backups" / result.backup_id / "xushi.db").exists()
-    assert commands == [
-        ["git", "status", "--porcelain"],
-        ["git", "rev-parse", "HEAD"],
-        ["git", "fetch", "--tags", "--prune"],
-        ["git", "checkout", "--detach", "v0.1.1"],
-        ["uv", "sync"],
+    assert (install_dir / "xushi").exists()
+    assert (install_dir / "xushi-daemon").exists()
+    assert urls == [
+        "https://github.com/Polaris-d/xushi/releases/download/v0.1.1/xushi-linux-x64",
+        "https://github.com/Polaris-d/xushi/releases/download/v0.1.1/xushi-daemon-linux-x64",
     ]
