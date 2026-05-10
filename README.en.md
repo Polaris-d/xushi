@@ -58,10 +58,10 @@ curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scr
 
 xushi prioritizes OpenClaw and Hermes integration. After installing xushi, configure the `plugins/openclaw-xushi` plugin, the OpenClaw `/hooks/agent` executor, or the Hermes agent webhook so reminders can flow back into agents and chat channels.
 
-Strongly recommended: before installation, ask the user whether to install the task-type guide. After the user agrees, set `XUSHI_INSTALL_AGENT_SKILLS=openclaw,hermes` for non-interactive installation. The script should not ask again while running. This installs the same `xushi-skills` package into the OpenClaw and Hermes skills directories:
+Strongly recommended: before installation, ask the user whether to install the OpenClaw plugin and the task-type guide. After the user agrees, set `XUSHI_INSTALL_AGENT_PLUGINS=openclaw` and `XUSHI_INSTALL_AGENT_SKILLS=openclaw,hermes` for non-interactive installation. The script should not ask again while running. The installer calls the current `xushi plugins install` / `xushi skills install` commands and copies the bundled OpenClaw plugin and `xushi-skills` into the target agent directories, avoiding app/plugin/skills version drift:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_INSTALL_AGENT_SKILLS=openclaw,hermes sh
+curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_INSTALL_AGENT_PLUGINS=openclaw XUSHI_INSTALL_AGENT_SKILLS=openclaw,hermes sh
 ```
 
 If your OpenClaw or Hermes skills directory is customized, set `XUSHI_OPENCLAW_SKILLS_DIR` / `XUSHI_HERMES_SKILLS_DIR` to the skills root. The installer also honors existing `OPENCLAW_SKILLS_DIR` / `HERMES_SKILLS_DIR` variables.
@@ -167,7 +167,7 @@ Authorization: Bearer <XUSHI_API_TOKEN>
 
 ## Release And Upgrade
 
-Tagged releases publish Python packages, Windows/macOS/Linux single-file binaries, the OpenClaw plugin zip, checksums, and generated release notes.
+Tagged releases publish Python packages, Windows/macOS/Linux single-file binaries, checksums, and generated release notes. The OpenClaw plugin is bundled with the xushi app and can also be published to ClawHub; GitHub Releases no longer attach a standalone plugin zip.
 
 xushi never upgrades silently. Run upgrades explicitly:
 
@@ -180,6 +180,15 @@ xushi upgrade rollback
 ```
 
 If `--version` is omitted, `upgrade apply` downloads the latest GitHub Release.
+
+If `xushi-skills` was installed before, sync the bundled skills after upgrading:
+
+```powershell
+xushi plugins status openclaw
+xushi plugins install openclaw
+xushi skills status
+xushi skills install --targets openclaw,hermes
+```
 
 ## Checks
 

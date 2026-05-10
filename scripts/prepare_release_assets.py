@@ -6,12 +6,9 @@ import argparse
 import platform
 import shutil
 import sys
-import zipfile
 from pathlib import Path
 
 BINARY_NAMES = ("xushi", "xushi-daemon")
-EXCLUDED_PLUGIN_PARTS = {".git", "node_modules", "__pycache__"}
-EXCLUDED_SKILL_PARTS = {".git", "__pycache__"}
 
 
 def normalize_platform_tag(system: str | None = None, machine: str | None = None) -> str:
@@ -64,32 +61,6 @@ def copy_python_dist(dist_dir: Path, output_dir: Path) -> list[Path]:
     return copied
 
 
-def package_openclaw_plugin(plugin_dir: Path, output_dir: Path) -> Path:
-    """打包 OpenClaw 插件目录。"""
-    output_dir.mkdir(parents=True, exist_ok=True)
-    archive = output_dir / "xushi-openclaw-plugin.zip"
-    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as zip_file:
-        for source in sorted(path for path in plugin_dir.rglob("*") if path.is_file()):
-            relative_path = source.relative_to(plugin_dir)
-            if _should_skip_plugin_file(relative_path):
-                continue
-            zip_file.write(source, relative_path.as_posix())
-    return archive
-
-
-def package_xushi_skills(skill_dir: Path, output_dir: Path) -> Path:
-    """打包 xushi agent skills。"""
-    output_dir.mkdir(parents=True, exist_ok=True)
-    archive = output_dir / "xushi-skills.zip"
-    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as zip_file:
-        for source in sorted(path for path in skill_dir.rglob("*") if path.is_file()):
-            relative_path = source.relative_to(skill_dir.parent)
-            if _should_skip_skill_file(relative_path):
-                continue
-            zip_file.write(source, relative_path.as_posix())
-    return archive
-
-
 def _find_binary(dist_dir: Path, binary_name: str) -> Path:
     """查找 PyInstaller 输出的单文件二进制。"""
     candidates = (dist_dir / binary_name, dist_dir / f"{binary_name}.exe")
@@ -97,20 +68,6 @@ def _find_binary(dist_dir: Path, binary_name: str) -> Path:
         if candidate.exists():
             return candidate
     raise FileNotFoundError(f"未在 {dist_dir} 找到 {binary_name} 二进制")
-
-
-def _should_skip_plugin_file(relative_path: Path) -> bool:
-    """判断插件打包时是否应跳过文件。"""
-    if any(part in EXCLUDED_PLUGIN_PARTS for part in relative_path.parts):
-        return True
-    return relative_path.suffix in {".pyc", ".pyo"}
-
-
-def _should_skip_skill_file(relative_path: Path) -> bool:
-    """判断 skill 打包时是否应跳过文件。"""
-    if any(part in EXCLUDED_SKILL_PARTS for part in relative_path.parts):
-        return True
-    return relative_path.suffix in {".pyc", ".pyo"}
 
 
 def _resolve_path(project_root: Path, value: str | None, default: Path) -> Path:
@@ -138,18 +95,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--platform-tag", help="二进制平台标签, 例如 linux-x64")
     parser.add_argument("--python-dist", action="store_true", help="复制 wheel 和 sdist")
     parser.add_argument("--binaries", action="store_true", help="复制并重命名二进制")
-    parser.add_argument("--plugin", action="store_true", help="打包 OpenClaw 插件")
-    parser.add_argument("--skills", action="store_true", help="打包 xushi agent skills")
     args = parser.parse_args(argv)
 
     project_root = args.project_root.resolve()
     dist_dir = _resolve_path(project_root, args.dist_dir, project_root / "dist")
     output_dir = _resolve_path(project_root, args.output_dir, project_root / "release-assets")
-    selected = args.python_dist or args.binaries or args.plugin or args.skills
+    selected = args.python_dist or args.binaries
     include_python_dist = args.python_dist or not selected
     include_binaries = args.binaries or not selected
-    include_plugin = args.plugin or not selected
-    include_skills = args.skills or not selected
 
     assets: list[Path] = []
     if include_python_dist:
@@ -162,21 +115,6 @@ def main(argv: list[str] | None = None) -> int:
                 platform_tag=args.platform_tag,
             )
         )
-    if include_plugin:
-        assets.append(
-            package_openclaw_plugin(
-                plugin_dir=project_root / "plugins" / "openclaw-xushi",
-                output_dir=output_dir,
-            )
-        )
-    if include_skills:
-        assets.append(
-            package_xushi_skills(
-                skill_dir=project_root / "skills" / "xushi-skills",
-                output_dir=output_dir,
-            )
-        )
-
     for asset in assets:
         print(asset)
     return 0

@@ -52,7 +52,7 @@ jobs:
           python-version: "3.12"
       - run: uv sync --dev
       - run: uv build
-      - run: uv run python scripts/prepare_release_assets.py --python-dist --plugin --skills
+      - run: uv run python scripts/prepare_release_assets.py --python-dist
       - uses: actions/upload-artifact@v4
         with:
           name: xushi-python-assets

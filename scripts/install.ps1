@@ -1,5 +1,7 @@
 param(
+    [string] $AgentPlugins = $env:XUSHI_INSTALL_AGENT_PLUGINS,
     [string] $AgentSkills = $env:XUSHI_INSTALL_AGENT_SKILLS,
+    [string] $OpenClawPluginsDir = $env:XUSHI_OPENCLAW_PLUGINS_DIR,
     [string] $OpenClawSkillsDir = $env:XUSHI_OPENCLAW_SKILLS_DIR,
     [string] $HermesSkillsDir = $env:XUSHI_HERMES_SKILLS_DIR
 )
@@ -69,76 +71,35 @@ function Install-Binary {
     Move-Item -Force -Path $temp -Destination $target
 }
 
-function Install-XushiSkillsPackage {
-    param(
-        [string] $Name,
-        [string] $SkillsDir
-    )
-    $target = Join-Path $skillsDir "xushi-skills"
-    $tempDir = Join-Path $skillsDir ".xushi-skills-download"
-    $archive = Join-Path $skillsDir "xushi-skills.zip"
-    $timestamp = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
-    $url = Get-ReleaseUrl "xushi-skills.zip"
-
-    Write-Host "Installing xushi-skills for $Name"
-    New-Item -ItemType Directory -Force -Path $skillsDir | Out-Null
-    if (Test-Path $tempDir) {
-        Remove-Item -Recurse -Force -LiteralPath $tempDir
-    }
-    New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
-    Invoke-WebRequest -Uri $url -OutFile $archive -UseBasicParsing
-    Expand-Archive -Force -Path $archive -DestinationPath $tempDir
-    if (-not (Test-Path (Join-Path $tempDir "xushi-skills\SKILL.md"))) {
-        throw "Invalid xushi-skills archive: missing SKILL.md"
-    }
-    if (Test-Path $target) {
-        Move-Item -Force -Path $target -Destination (Join-Path $skillsDir "xushi-skills.backup-$timestamp")
-    }
-    Move-Item -Force -Path (Join-Path $tempDir "xushi-skills") -Destination $target
-    Remove-Item -Recurse -Force -LiteralPath $tempDir
-    Remove-Item -Force -LiteralPath $archive
-}
-
-function Install-XushiSkillsForOpenClaw {
-    $skillsDir = $OpenClawSkillsDir
-    if (-not $skillsDir) {
-        $skillsDir = $env:OPENCLAW_SKILLS_DIR
-    }
-    if (-not $skillsDir) {
-        $openclawHome = $env:OPENCLAW_HOME
-        if (-not $openclawHome) {
-            $openclawHome = Join-Path $env:USERPROFILE ".openclaw"
-        }
-        $skillsDir = Join-Path $openclawHome "skills"
-    }
-    Install-XushiSkillsPackage "OpenClaw" $skillsDir
-}
-
-function Install-XushiSkillsForHermes {
-    $skillsDir = $HermesSkillsDir
-    if (-not $skillsDir) {
-        $skillsDir = $env:HERMES_SKILLS_DIR
-    }
-    if (-not $skillsDir) {
-        $hermesHome = $env:HERMES_HOME
-        if (-not $hermesHome) {
-            $hermesHome = Join-Path $env:USERPROFILE ".hermes"
-        }
-        $skillsDir = Join-Path $hermesHome "skills"
-    }
-    Install-XushiSkillsPackage "Hermes" $skillsDir
-}
-
 function Install-AgentSkills {
     if (-not $AgentSkills) {
         return
     }
-    foreach ($target in ($AgentSkills -split ",")) {
+    $args = @("skills", "install", "--targets", $AgentSkills)
+    if ($OpenClawSkillsDir) {
+        $args += @("--openclaw-skills-dir", $OpenClawSkillsDir)
+    }
+    if ($HermesSkillsDir) {
+        $args += @("--hermes-skills-dir", $HermesSkillsDir)
+    }
+    & (Join-Path $BinDir "xushi.exe") @args
+}
+
+function Install-AgentPlugins {
+    if (-not $AgentPlugins) {
+        return
+    }
+    foreach ($target in ($AgentPlugins -split ",")) {
         switch ($target.Trim().ToLowerInvariant()) {
-            "openclaw" { Install-XushiSkillsForOpenClaw }
-            "hermes" { Install-XushiSkillsForHermes }
+            "openclaw" {
+                $args = @("plugins", "install", "openclaw")
+                if ($OpenClawPluginsDir) {
+                    $args += @("--openclaw-plugins-dir", $OpenClawPluginsDir)
+                }
+                & (Join-Path $BinDir "xushi.exe") @args
+            }
             "" { }
-            default { throw "Unsupported XUSHI_INSTALL_AGENT_SKILLS target: $target" }
+            default { throw "Unsupported XUSHI_INSTALL_AGENT_PLUGINS target: $target" }
         }
     }
 }
@@ -173,6 +134,7 @@ New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
 Install-Binary "xushi" $platformTag
 Install-Binary "xushi-daemon" $platformTag
 Ensure-UserPath
+Install-AgentPlugins
 Install-AgentSkills
 
 & (Join-Path $BinDir "xushi.exe") init --show-token
@@ -181,6 +143,9 @@ Install-AgentSkills
 Write-Host ""
 Write-Host "xushi is installed into $BinDir."
 Write-Host "Global command path has been configured for new PowerShell sessions."
+if ($AgentPlugins) {
+    Write-Host "Agent plugins installed for: $AgentPlugins"
+}
 if ($AgentSkills) {
     Write-Host "Agent skills installed for: $AgentSkills"
 }

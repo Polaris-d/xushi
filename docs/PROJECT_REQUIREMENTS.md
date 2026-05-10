@@ -61,8 +61,9 @@
 - 手动升级必须支持查看状态、检查目标版本、创建备份、从 GitHub Release 下载替换全局命令和从备份恢复。
 - 提供 wheel 和跨平台预编译二进制构建配置，降低非 Python 用户安装门槛。
 - 提供 tag 触发的 GitHub Release 工作流，发布 wheel 与跨平台二进制产物。
-- GitHub Release 资产必须使用唯一、可读的平台命名，并包含 OpenClaw 插件包、自动 release notes 和 SHA256 校验和。
-- GitHub Release 资产必须包含 `xushi-skills.zip`，确保 agent skill 与当前二进制版本一致。
+- GitHub Release 资产必须使用唯一、可读的平台命名，并包含自动 release notes 和 SHA256 校验和。
+- `xushi-skills` 必须随应用程序打包，安装和升级以当前 `xushi` 程序版本为准；GitHub Release 不再发布独立的 `xushi-skills.zip`，避免 skills 与程序版本错配。
+- OpenClaw 插件必须随应用程序打包，安装和升级以当前 `xushi` 程序版本为准；GitHub Release 不再发布独立的插件 zip。插件源码目录仍保留，用于开发和 ClawHub 发布。
 - 提供 `.gitattributes` 控制跨平台换行，避免 shell 脚本和 CI 配置在 Windows 开发环境中被破坏。
 - 项目采用 MIT License 开源。
 - 提供贡献指南、安全策略、Issue 模板和 PR 模板，降低外部协作成本。
@@ -133,3 +134,5 @@
 | 2026-05-10 | 调整 | 免打扰从 schedule 层调整为 delivery 层通用策略，支持全局默认、任务覆盖、工作日窗口和摘要聚合。 |
 | 2026-05-10 | 明确 | 安装引导必须在安装前强烈推荐并询问是否安装 `xushi-skills`，并在配置完成后通过用户确认的测试提醒验证投递链路。 |
 | 2026-05-10 | 明确 | 细化安装后配置流程，要求 agent 重点检查 token 作用域、daemon 重启、executor id、hook URL 可达性和渠道投递结果。 |
+| 2026-05-10 | 调整 | `xushi-skills` 从独立 Release zip 调整为随 `xushi` 应用打包，通过 `xushi skills install/status` 安装和检查，不再发布 `xushi-skills.zip`。 |
+| 2026-05-10 | 调整 | OpenClaw 插件从独立 Release zip 调整为随 `xushi` 应用打包，通过 `xushi plugins install/status` 安装和检查，并保留 ClawHub 发布入口。 |

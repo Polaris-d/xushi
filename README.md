@@ -66,10 +66,10 @@ curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scr
 
 序时优先适配 OpenClaw 和 Hermes。安装后建议优先配置 `plugins/openclaw-xushi` 插件、OpenClaw `/hooks/agent` executor，或 Hermes agent webhook，把提醒投递回 agent 和聊天渠道。
 
-强烈推荐：安装前请先询问用户是否同时安装任务类型指南。得到用户同意后，可以设置 `XUSHI_INSTALL_AGENT_SKILLS=openclaw,hermes` 静默安装，不要在脚本执行中再次追问。这会把同一套 `xushi-skills` 安装到 OpenClaw 和 Hermes 各自的 skills 目录：
+强烈推荐：安装前请先询问用户是否同时安装 OpenClaw 插件和任务类型指南。得到用户同意后，可以设置 `XUSHI_INSTALL_AGENT_PLUGINS=openclaw` 与 `XUSHI_INSTALL_AGENT_SKILLS=openclaw,hermes` 静默安装，不要在脚本执行中再次追问。安装脚本会调用当前版本的 `xushi plugins install` / `xushi skills install`，把随应用内置的 OpenClaw 插件和 `xushi-skills` 安装到对应目录，避免插件、skills 与程序版本错配：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_INSTALL_AGENT_SKILLS=openclaw,hermes sh
+curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_INSTALL_AGENT_PLUGINS=openclaw XUSHI_INSTALL_AGENT_SKILLS=openclaw,hermes sh
 ```
 
 如果你的 OpenClaw 或 Hermes skills 目录做过调整，可以设置 `XUSHI_OPENCLAW_SKILLS_DIR` / `XUSHI_HERMES_SKILLS_DIR` 指定 skills 根目录；安装器也会兼容已有的 `OPENCLAW_SKILLS_DIR` / `HERMES_SKILLS_DIR`。
@@ -78,6 +78,7 @@ Windows PowerShell：
 
 ```powershell
 $env:XUSHI_INSTALL_AGENT_SKILLS = "openclaw,hermes"
+$env:XUSHI_INSTALL_AGENT_PLUGINS = "openclaw"
 irm https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.ps1 | iex
 ```
 
@@ -100,7 +101,7 @@ irm https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/in
 | 能力 | 状态 | 说明 |
 | --- | --- | --- |
 | Python daemon | 可用 | FastAPI + SQLite，本地调度与 API |
-| CLI | 可用 | `init`、`doctor`、`create`、`list`、`trigger`、`runs`、`confirm-latest`、`tick`、`executors`、`notifications`、`deliveries`、`upgrade` |
+| CLI | 可用 | `init`、`doctor`、`create`、`list`、`trigger`、`runs`、`confirm-latest`、`tick`、`executors`、`notifications`、`deliveries`、`plugins`、`skills`、`upgrade` |
 | Web 管理台 | 可用 | 访问 daemon 根路径查看任务、运行记录和通知 |
 | OpenClaw 插件 | 可用 | `plugins/openclaw-xushi`，提供创建、查询、触发、运行记录过滤、最近确认和 callback 工具 |
 | xushi-skills | 可用 | `skills/xushi-skills`，帮助 agent 判断任务类型、生成 schema、适当追问并记录本地优化反馈草稿 |
@@ -343,7 +344,7 @@ git tag v0.1.5
 git push origin v0.1.5
 ```
 
-`.github/workflows/release.yml` 会在 tag 上执行跨平台质量检查，生成 Python wheel/sdist、Windows/macOS/Linux 单文件二进制、OpenClaw 插件 zip，并在 GitHub Release 中附带 `SHA256SUMS.txt` 校验和与自动 release notes。
+`.github/workflows/release.yml` 会在 tag 上执行跨平台质量检查，生成 Python wheel/sdist、Windows/macOS/Linux 单文件二进制，并在 GitHub Release 中附带 `SHA256SUMS.txt` 校验和与自动 release notes。OpenClaw 插件随 `xushi` 应用内置安装，也可以另行发布到 ClawHub；GitHub Release 不再提供独立插件 zip。
 
 序时不会静默自动升级。用户需要显式执行 CLI 命令，升级器会先备份本地配置和 SQLite 数据，再从 GitHub Release 下载并替换全局命令：
 
@@ -356,6 +357,15 @@ xushi upgrade rollback
 ```
 
 如果省略 `--version`，`upgrade apply` 会下载 latest release。
+
+如果之前安装过 `xushi-skills`，升级后请用新版本程序同步一次内置 skills：
+
+```powershell
+xushi plugins status openclaw
+xushi plugins install openclaw
+xushi skills status
+xushi skills install --targets openclaw,hermes
+```
 
 ## 贡献与安全
 

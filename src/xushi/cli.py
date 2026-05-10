@@ -11,12 +11,18 @@ import typer
 
 from xushi.config import Settings, default_config_path, write_initial_config
 from xushi.models import Executor, RunStatus, TaskCreate
+from xushi.plugins import bundled_plugin_status, install_bundled_plugin
 from xushi.service import XushiService
+from xushi.skills import bundled_skills_status, install_bundled_skills
 from xushi.upgrade import UpgradeError, UpgradeManager, default_bin_dir
 
 app = typer.Typer(help="序时 xushi 本地日程与 agent 调度工具。")
 upgrade_app = typer.Typer(help="手动安全升级序时。")
+skills_app = typer.Typer(help="安装和检查随 xushi 版本携带的 xushi-skills。")
+plugins_app = typer.Typer(help="安装和检查随 xushi 版本携带的 agent 插件。")
 app.add_typer(upgrade_app, name="upgrade")
+app.add_typer(skills_app, name="skills")
+app.add_typer(plugins_app, name="plugins")
 
 
 def _service() -> XushiService:
@@ -233,6 +239,102 @@ def deliveries() -> None:
     """列出投递计划。"""
     items = [delivery.model_dump(mode="json") for delivery in _service().list_deliveries()]
     _echo_json(items)
+
+
+@skills_app.command("status")
+def skills_status(
+    targets: Annotated[
+        str,
+        typer.Option(help="逗号分隔的目标, 当前支持 openclaw,hermes。"),
+    ] = "openclaw,hermes",
+    openclaw_skills_dir: Annotated[
+        Path | None,
+        typer.Option(help="OpenClaw skills 根目录。"),
+    ] = None,
+    hermes_skills_dir: Annotated[
+        Path | None,
+        typer.Option(help="Hermes skills 根目录。"),
+    ] = None,
+) -> None:
+    """查看内置 xushi-skills 与目标目录状态。"""
+    try:
+        _echo_json(
+            bundled_skills_status(
+                targets,
+                openclaw_skills_dir=openclaw_skills_dir,
+                hermes_skills_dir=hermes_skills_dir,
+            )
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+
+@skills_app.command("install")
+def skills_install(
+    targets: Annotated[
+        str,
+        typer.Option(help="逗号分隔的目标, 当前支持 openclaw,hermes。"),
+    ] = "openclaw,hermes",
+    openclaw_skills_dir: Annotated[
+        Path | None,
+        typer.Option(help="OpenClaw skills 根目录。"),
+    ] = None,
+    hermes_skills_dir: Annotated[
+        Path | None,
+        typer.Option(help="Hermes skills 根目录。"),
+    ] = None,
+) -> None:
+    """从当前 xushi 应用内置资源安装 xushi-skills。"""
+    try:
+        _echo_json(
+            install_bundled_skills(
+                targets,
+                openclaw_skills_dir=openclaw_skills_dir,
+                hermes_skills_dir=hermes_skills_dir,
+            )
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+
+@plugins_app.command("status")
+def plugin_status(
+    target: Annotated[
+        str,
+        typer.Argument(help="插件目标, 当前支持 openclaw。"),
+    ] = "openclaw",
+    openclaw_plugins_dir: Annotated[
+        Path | None,
+        typer.Option(help="OpenClaw plugins 根目录。"),
+    ] = None,
+) -> None:
+    """查看内置插件与目标目录状态。"""
+    try:
+        _echo_json(
+            bundled_plugin_status(target, openclaw_plugins_dir=openclaw_plugins_dir)
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+
+@plugins_app.command("install")
+def plugin_install(
+    target: Annotated[
+        str,
+        typer.Argument(help="插件目标, 当前支持 openclaw。"),
+    ] = "openclaw",
+    openclaw_plugins_dir: Annotated[
+        Path | None,
+        typer.Option(help="OpenClaw plugins 根目录。"),
+    ] = None,
+) -> None:
+    """从当前 xushi 应用内置资源安装 agent 插件。"""
+    try:
+        _echo_json(
+            install_bundled_plugin(target, openclaw_plugins_dir=openclaw_plugins_dir)
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
 
 
 @upgrade_app.command("status")

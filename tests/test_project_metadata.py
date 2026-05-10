@@ -1,5 +1,6 @@
 """开源项目元信息测试。"""
 
+import json
 from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
@@ -45,7 +46,7 @@ def test_installation_guide_is_agent_readable() -> None:
     assert "--openclaw-skills-dir" in guide
     assert "--hermes-skills-dir" in guide
     assert "strongly recommended" in guide
-    assert "是否同时安装 xushi-skills" in guide
+    assert "是否同时安装 OpenClaw 插件和 xushi-skills" in guide
     assert "Run an interactive delivery check" in guide
     assert "我刚刚发送了一条序时测试提醒" in guide
     assert "Common mistakes to avoid" in guide
@@ -69,6 +70,11 @@ def test_install_scripts_use_safe_defaults() -> None:
     assert "xushi-daemon" in sh
     assert "Ensure-UserPath" in ps1
     assert "ensure_path_config" in sh
+    assert "XUSHI_INSTALL_AGENT_PLUGINS" in ps1
+    assert "XUSHI_INSTALL_AGENT_PLUGINS" in sh
+    assert "XUSHI_OPENCLAW_PLUGINS_DIR" in ps1
+    assert "XUSHI_OPENCLAW_PLUGINS_DIR" in sh
+    assert "OPENCLAW_PLUGINS_DIR" in sh
     assert "XUSHI_INSTALL_AGENT_SKILLS" in ps1
     assert "XUSHI_INSTALL_AGENT_SKILLS" in sh
     assert "XUSHI_OPENCLAW_SKILLS_DIR" in ps1
@@ -87,8 +93,14 @@ def test_install_scripts_use_safe_defaults() -> None:
     assert "hermes" in sh
     assert "CODEX_HOME" not in ps1
     assert "CODEX_HOME" not in sh
-    assert "xushi-skills.zip" in ps1
-    assert "xushi-skills.zip" in sh
+    assert "plugins install" in ps1
+    assert "plugins install" in sh
+    assert "skills install" in ps1
+    assert "skills install" in sh
+    assert "xushi-skills.zip" not in ps1
+    assert "xushi-skills.zip" not in sh
+    assert "xushi-openclaw-plugin.zip" not in ps1
+    assert "xushi-openclaw-plugin.zip" not in sh
 
 
 def test_openclaw_hooks_agent_uses_environment_configuration() -> None:
@@ -131,16 +143,24 @@ def test_release_workflow_publishes_tagged_artifacts() -> None:
     release_workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
         encoding="utf-8"
     )
+    build_workflow = (ROOT / ".github" / "workflows" / "build.yml").read_text(encoding="utf-8")
 
     assert "tags: [\"v*\"]" in release_workflow
     assert "softprops/action-gh-release" in release_workflow
     assert "actions/upload-artifact" in release_workflow
     assert "actions/download-artifact" in release_workflow
     assert "scripts/prepare_release_assets.py" in release_workflow
-    assert "--skills" in release_workflow
+    assert "--skills" not in release_workflow
+    assert "--plugin" not in release_workflow
     assert "merge-multiple: true" in release_workflow
     assert "SHA256SUMS.txt" in release_workflow
     assert "generate_release_notes: true" in release_workflow
+    assert "--skills" not in build_workflow
+    assert "--plugin" not in build_workflow
+    assert "xushi-skills.zip" not in release_workflow
+    assert "xushi-skills.zip" not in build_workflow
+    assert "xushi-openclaw-plugin.zip" not in release_workflow
+    assert "xushi-openclaw-plugin.zip" not in build_workflow
 
 
 def test_build_workflow_does_not_upload_pyinstaller_spec_files() -> None:
@@ -208,3 +228,53 @@ def test_xushi_skills_include_agent_task_type_guidance() -> None:
     assert "确认完成" in questions
     assert "docs/xushi-feedback-notes.md" in optimization_notes
     assert "Do not upload" in optimization_notes
+
+
+def test_bundled_xushi_skills_match_repository_copy() -> None:
+    source_root = ROOT / "skills" / "xushi-skills"
+    bundled_root = ROOT / "src" / "xushi" / "bundled_skills" / "xushi-skills"
+    source_files = sorted(
+        path.relative_to(source_root) for path in source_root.rglob("*") if path.is_file()
+    )
+    bundled_files = sorted(
+        path.relative_to(bundled_root) for path in bundled_root.rglob("*") if path.is_file()
+    )
+
+    assert bundled_files == source_files
+    for relative_path in source_files:
+        assert (bundled_root / relative_path).read_text(encoding="utf-8") == (
+            source_root / relative_path
+        ).read_text(encoding="utf-8")
+
+
+def test_openclaw_plugin_version_matches_app_and_bundled_copy() -> None:
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    manifest = json.loads(
+        (ROOT / "plugins" / "openclaw-xushi" / "openclaw.plugin.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    package = json.loads(
+        (ROOT / "plugins" / "openclaw-xushi" / "package.json").read_text(encoding="utf-8")
+    )
+    app_version = pyproject.split('version = "', maxsplit=1)[1].split('"', maxsplit=1)[0]
+
+    assert manifest["version"] == app_version
+    assert package["version"] == app_version
+
+
+def test_bundled_openclaw_plugin_matches_repository_copy() -> None:
+    source_root = ROOT / "plugins" / "openclaw-xushi"
+    bundled_root = ROOT / "src" / "xushi" / "bundled_plugins" / "openclaw-xushi"
+    source_files = sorted(
+        path.relative_to(source_root) for path in source_root.rglob("*") if path.is_file()
+    )
+    bundled_files = sorted(
+        path.relative_to(bundled_root) for path in bundled_root.rglob("*") if path.is_file()
+    )
+
+    assert bundled_files == source_files
+    for relative_path in source_files:
+        assert (bundled_root / relative_path).read_text(encoding="utf-8") == (
+            source_root / relative_path
+        ).read_text(encoding="utf-8")

@@ -33,12 +33,12 @@ Tell the user that xushi will be installed from GitHub Releases into `~/.xushi/b
 
 Also make the integration priority explicit: xushi prioritizes OpenClaw and Hermes. The normal path is installing xushi, then configuring the OpenClaw plugin and `/hooks/agent` executor or the Hermes agent webhook.
 
-Before running the installer, ask the user whether to install `xushi-skills`. This is strongly recommended for agent users because it teaches agents how to choose task types, ask clarification questions, configure quiet policy, and record useful feedback. Do not install skills unless the user agrees; after consent, use the non-interactive installer parameter instead of asking again during installation.
+Before running the installer, ask the user whether to install the OpenClaw plugin and `xushi-skills`. This is strongly recommended for agent users because the plugin exposes xushi tools inside OpenClaw, and the skills teach agents how to choose task types, ask clarification questions, configure quiet policy, and record useful feedback. Do not install plugin or skills unless the user agrees; after consent, use the non-interactive installer parameters instead of asking again during installation.
 
 Suggested wording:
 
 ```text
-是否同时安装 xushi-skills？强烈推荐安装。它会帮助 OpenClaw/Hermes 更准确地理解序时的任务类型、免打扰策略和确认流程。安装脚本可以通过参数静默完成，不会在安装过程中再次打断你。
+是否同时安装 OpenClaw 插件和 xushi-skills？强烈推荐安装。插件会把序时工具接入 OpenClaw，skills 会帮助 OpenClaw/Hermes 更准确地理解序时的任务类型、免打扰策略和确认流程。安装脚本可以通过参数静默完成，不会在安装过程中再次打断你。
 ```
 
 ### Step 1: Check prerequisites
@@ -78,18 +78,21 @@ Optional environment variables:
 | `XUSHI_VERSION` | Release tag to install, for example `v0.1.5`; default is latest |
 | `XUSHI_BIN_DIR` | Binary install directory; default is `~/.xushi/bin` |
 | `XUSHI_REPO_SLUG` | GitHub repository slug; default is `Polaris-d/xushi` |
+| `XUSHI_INSTALL_AGENT_PLUGINS` | Optional comma-separated auxiliary plugin targets; currently supports `openclaw` |
 | `XUSHI_INSTALL_AGENT_SKILLS` | Optional comma-separated auxiliary skill targets; currently supports `openclaw` and `hermes` |
+| `XUSHI_OPENCLAW_PLUGINS_DIR` | Optional OpenClaw plugins root override; if unset, the installer also honors `OPENCLAW_PLUGINS_DIR`; default is `${OPENCLAW_HOME:-~/.openclaw}/plugins` |
 | `XUSHI_OPENCLAW_SKILLS_DIR` | Optional OpenClaw skills root override; if unset, the installer also honors `OPENCLAW_SKILLS_DIR`; default is `${OPENCLAW_HOME:-~/.openclaw}/skills` |
 | `XUSHI_HERMES_SKILLS_DIR` | Optional Hermes skills root override; if unset, the installer also honors `HERMES_SKILLS_DIR`; default is `${HERMES_HOME:-~/.hermes}/skills` |
 
-Do not install skills without the user's permission. Ask before setting this option, and make the recommendation explicit. If the user agrees, set `XUSHI_INSTALL_AGENT_SKILLS=openclaw,hermes` or pass `--agent-skills openclaw,hermes`; if the user declines, continue installing xushi itself without skills.
+Do not install plugin or skills without the user's permission. Ask before setting these options, and make the recommendation explicit. If the user agrees, set `XUSHI_INSTALL_AGENT_PLUGINS=openclaw` and `XUSHI_INSTALL_AGENT_SKILLS=openclaw,hermes`, or pass `--agent-plugins openclaw --agent-skills openclaw,hermes`; if the user declines, continue installing xushi itself without agent add-ons. The installer does not download standalone plugin or skills archives. It installs the OpenClaw plugin and `xushi-skills` bundled inside the current `xushi` app, so the plugin and skills versions follow the app version.
 
 Use these targets:
 
+- plugin target `openclaw`: installs into `${OPENCLAW_HOME:-~/.openclaw}/plugins/openclaw-xushi`.
 - `openclaw`: installs into `${OPENCLAW_HOME:-~/.openclaw}/skills/xushi-skills`.
 - `hermes`: installs into `${HERMES_HOME:-~/.hermes}/skills/xushi-skills`.
 
-If the user's OpenClaw or Hermes skills directory has been customized, use `XUSHI_OPENCLAW_SKILLS_DIR` or `XUSHI_HERMES_SKILLS_DIR` before running the installer. If an agent environment already exposes `OPENCLAW_SKILLS_DIR` or `HERMES_SKILLS_DIR`, the installer will honor those too. The directory value should be the skills root, not the agent home; the installer creates or replaces the `xushi-skills` child folder inside it.
+If the user's OpenClaw plugin or skills directory has been customized, use `XUSHI_OPENCLAW_PLUGINS_DIR`, `XUSHI_OPENCLAW_SKILLS_DIR`, or `XUSHI_HERMES_SKILLS_DIR` before running the installer. If an agent environment already exposes `OPENCLAW_PLUGINS_DIR`, `OPENCLAW_SKILLS_DIR`, or `HERMES_SKILLS_DIR`, the installer will honor those too. The directory value should be the plugins/skills root, not the agent home; the installer creates or replaces the `openclaw-xushi` or `xushi-skills` child folder inside it.
 
 If the user agrees, install xushi and `xushi-skills` for OpenClaw/Hermes in one non-interactive command.
 
@@ -97,6 +100,8 @@ Windows PowerShell:
 
 ```powershell
 $env:XUSHI_INSTALL_AGENT_SKILLS = "openclaw,hermes"
+$env:XUSHI_INSTALL_AGENT_PLUGINS = "openclaw"
+$env:XUSHI_OPENCLAW_PLUGINS_DIR = "D:\Agents\OpenClaw\plugins"
 $env:XUSHI_OPENCLAW_SKILLS_DIR = "D:\Agents\OpenClaw\skills"
 $env:XUSHI_HERMES_SKILLS_DIR = "D:\Agents\Hermes\skills"
 irm https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.ps1 | iex
@@ -105,19 +110,19 @@ irm https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/in
 macOS / Linux:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_INSTALL_AGENT_SKILLS=openclaw,hermes sh
+curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_INSTALL_AGENT_PLUGINS=openclaw XUSHI_INSTALL_AGENT_SKILLS=openclaw,hermes sh
 ```
 
 With custom skills directories:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_INSTALL_AGENT_SKILLS=openclaw,hermes XUSHI_OPENCLAW_SKILLS_DIR="$HOME/agents/openclaw-skills" XUSHI_HERMES_SKILLS_DIR="$HOME/agents/hermes-skills" sh
+curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_INSTALL_AGENT_PLUGINS=openclaw XUSHI_INSTALL_AGENT_SKILLS=openclaw,hermes XUSHI_OPENCLAW_PLUGINS_DIR="$HOME/agents/openclaw-plugins" XUSHI_OPENCLAW_SKILLS_DIR="$HOME/agents/openclaw-skills" XUSHI_HERMES_SKILLS_DIR="$HOME/agents/hermes-skills" sh
 ```
 
 The shell installer also accepts explicit arguments, which can be easier for agents to compose safely:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | sh -s -- --agent-skills openclaw,hermes --openclaw-skills-dir "$HOME/agents/openclaw-skills" --hermes-skills-dir "$HOME/agents/hermes-skills"
+curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | sh -s -- --agent-plugins openclaw --agent-skills openclaw,hermes --openclaw-plugins-dir "$HOME/agents/openclaw-plugins" --openclaw-skills-dir "$HOME/agents/openclaw-skills" --hermes-skills-dir "$HOME/agents/hermes-skills"
 ```
 
 ### Step 3: Verify setup
@@ -130,7 +135,14 @@ xushi doctor
 
 The installer also runs `xushi init --show-token` and `xushi doctor` by absolute path immediately after downloading the binaries.
 
-If `XUSHI_INSTALL_AGENT_SKILLS=openclaw,hermes` was provided, verify that `xushi-skills` exists under the configured OpenClaw and Hermes skills directories. When no override is set, check `${OPENCLAW_HOME:-~/.openclaw}/skills/xushi-skills` and `${HERMES_HOME:-~/.hermes}/skills/xushi-skills`.
+If `XUSHI_INSTALL_AGENT_PLUGINS=openclaw` was provided, verify that `openclaw-xushi` exists under the configured OpenClaw plugins directory. If `XUSHI_INSTALL_AGENT_SKILLS=openclaw,hermes` was provided, verify that `xushi-skills` exists under the configured OpenClaw and Hermes skills directories. When no override is set, check `${OPENCLAW_HOME:-~/.openclaw}/plugins/openclaw-xushi`, `${OPENCLAW_HOME:-~/.openclaw}/skills/xushi-skills`, and `${HERMES_HOME:-~/.hermes}/skills/xushi-skills`. You can also run:
+
+```bash
+xushi plugins status openclaw
+xushi skills status
+```
+
+The reported installed plugin and skills versions should match the current xushi app version.
 
 ### Step 4: Start daemon
 
@@ -180,7 +192,7 @@ Common mistakes to avoid:
 
 #### 5.2 Configure the agent-side client
 
-For OpenClaw, install or enable the OpenClaw plugin in `plugins/openclaw-xushi`, set its base URL to `XUSHI_BASE_URL`, and configure `tokenEnv` as `XUSHI_API_TOKEN`.
+For OpenClaw, install or enable the OpenClaw plugin with `xushi plugins install openclaw`, set its base URL to `XUSHI_BASE_URL`, and configure `tokenEnv` as `XUSHI_API_TOKEN`.
 
 Pay attention to where environment variables live:
 
@@ -390,4 +402,13 @@ The upgrade command creates a backup of the local config and SQLite database bef
 
 ```bash
 xushi upgrade rollback
+```
+
+If `xushi-skills` was installed before, sync it after upgrading so the installed skills match the current application version:
+
+```bash
+xushi plugins status openclaw
+xushi plugins install openclaw
+xushi skills status
+xushi skills install --targets openclaw,hermes
 ```

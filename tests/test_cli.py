@@ -59,6 +59,118 @@ def test_cli_lists_deliveries(tmp_path, monkeypatch) -> None:
     assert task.id in result.output
 
 
+def test_cli_installs_bundled_skills(tmp_path) -> None:
+    openclaw_dir = tmp_path / "openclaw-skills"
+    hermes_dir = tmp_path / "hermes-skills"
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "skills",
+            "install",
+            "--targets",
+            "openclaw,hermes",
+            "--openclaw-skills-dir",
+            str(openclaw_dir),
+            "--hermes-skills-dir",
+            str(hermes_dir),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert (openclaw_dir / "xushi-skills" / "SKILL.md").exists()
+    assert (hermes_dir / "xushi-skills" / "SKILL.md").exists()
+    assert "bundled" in result.output
+
+
+def test_cli_reports_bundled_skills_status(tmp_path) -> None:
+    openclaw_dir = tmp_path / "openclaw-skills"
+
+    install_result = CliRunner().invoke(
+        app,
+        [
+            "skills",
+            "install",
+            "--targets",
+            "openclaw",
+            "--openclaw-skills-dir",
+            str(openclaw_dir),
+        ],
+    )
+    assert install_result.exit_code == 0
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "skills",
+            "status",
+            "--targets",
+            "openclaw",
+            "--openclaw-skills-dir",
+            str(openclaw_dir),
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["source"] == "bundled"
+    assert payload["targets"][0]["installed"] is True
+    assert payload["targets"][0]["installed_version"] == payload["app_version"]
+
+
+def test_cli_installs_bundled_openclaw_plugin(tmp_path) -> None:
+    plugins_dir = tmp_path / "openclaw-plugins"
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "plugins",
+            "install",
+            "openclaw",
+            "--openclaw-plugins-dir",
+            str(plugins_dir),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert (plugins_dir / "openclaw-xushi" / "openclaw.plugin.json").exists()
+    assert (plugins_dir / "openclaw-xushi" / "dist" / "index.js").exists()
+    assert "bundled" in result.output
+
+
+def test_cli_reports_bundled_openclaw_plugin_status(tmp_path) -> None:
+    plugins_dir = tmp_path / "openclaw-plugins"
+
+    install_result = CliRunner().invoke(
+        app,
+        [
+            "plugins",
+            "install",
+            "openclaw",
+            "--openclaw-plugins-dir",
+            str(plugins_dir),
+        ],
+    )
+    assert install_result.exit_code == 0
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "plugins",
+            "status",
+            "openclaw",
+            "--openclaw-plugins-dir",
+            str(plugins_dir),
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["source"] == "bundled"
+    assert payload["installed"] is True
+    assert payload["installed_version"] == payload["app_version"]
+
+
 def test_cli_init_writes_config_without_printing_full_token(tmp_path) -> None:
     config_path = tmp_path / "config.json"
     state_dir = tmp_path / "state"

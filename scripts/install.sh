@@ -4,7 +4,9 @@ set -eu
 REPO_SLUG="${XUSHI_REPO_SLUG:-Polaris-d/xushi}"
 VERSION="${XUSHI_VERSION:-latest}"
 BIN_DIR="${XUSHI_BIN_DIR:-${XUSHI_INSTALL_DIR:-$HOME/.xushi/bin}}"
+AGENT_PLUGINS="${XUSHI_INSTALL_AGENT_PLUGINS:-}"
 AGENT_SKILLS="${XUSHI_INSTALL_AGENT_SKILLS:-}"
+OPENCLAW_PLUGINS_DIR="${XUSHI_OPENCLAW_PLUGINS_DIR:-${OPENCLAW_PLUGINS_DIR:-}}"
 OPENCLAW_SKILLS_DIR="${XUSHI_OPENCLAW_SKILLS_DIR:-${OPENCLAW_SKILLS_DIR:-}}"
 HERMES_SKILLS_DIR="${XUSHI_HERMES_SKILLS_DIR:-${HERMES_SKILLS_DIR:-}}"
 
@@ -20,6 +22,30 @@ while [ "$#" -gt 0 ]; do
       ;;
     --agent-skills=*)
       AGENT_SKILLS="${1#*=}"
+      shift
+      ;;
+    --agent-plugins)
+      if [ "$#" -lt 2 ]; then
+        echo "Missing value for --agent-plugins" >&2
+        exit 1
+      fi
+      AGENT_PLUGINS="$2"
+      shift 2
+      ;;
+    --agent-plugins=*)
+      AGENT_PLUGINS="${1#*=}"
+      shift
+      ;;
+    --openclaw-plugins-dir)
+      if [ "$#" -lt 2 ]; then
+        echo "Missing value for --openclaw-plugins-dir" >&2
+        exit 1
+      fi
+      OPENCLAW_PLUGINS_DIR="$2"
+      shift 2
+      ;;
+    --openclaw-plugins-dir=*)
+      OPENCLAW_PLUGINS_DIR="${1#*=}"
       shift
       ;;
     --openclaw-skills-dir)
@@ -108,69 +134,45 @@ install_binary() {
   mv "$temp" "$target"
 }
 
-install_xushi_skills_package() {
-  require_cmd unzip
-  target_name="$1"
-  skills_dir="$2"
-  target="$skills_dir/xushi-skills"
-  temp_dir="$skills_dir/.xushi-skills-download"
-  archive="$skills_dir/xushi-skills.zip"
-  url="$(release_url "xushi-skills.zip")"
-  timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
-
-  echo "Installing xushi-skills for $target_name"
-  mkdir -p "$skills_dir"
-  rm -rf "$temp_dir"
-  mkdir -p "$temp_dir"
-  curl -fL --retry 3 --connect-timeout 15 -o "$archive" "$url"
-  unzip -q "$archive" -d "$temp_dir"
-  if [ ! -f "$temp_dir/xushi-skills/SKILL.md" ]; then
-    echo "Invalid xushi-skills archive: missing SKILL.md" >&2
-    exit 1
+install_agent_plugins() {
+  if [ -z "$AGENT_PLUGINS" ]; then
+    return 0
   fi
-  if [ -e "$target" ]; then
-    mv "$target" "$skills_dir/xushi-skills.backup-$timestamp"
-  fi
-  mv "$temp_dir/xushi-skills" "$target"
-  rm -rf "$temp_dir" "$archive"
-}
-
-install_xushi_skills_for_openclaw() {
-  skills_dir="$OPENCLAW_SKILLS_DIR"
-  if [ -z "$skills_dir" ]; then
-    skills_dir="${OPENCLAW_HOME:-$HOME/.openclaw}/skills"
-  fi
-  install_xushi_skills_package "OpenClaw" "$skills_dir"
-}
-
-install_xushi_skills_for_hermes() {
-  skills_dir="$HERMES_SKILLS_DIR"
-  if [ -z "$skills_dir" ]; then
-    skills_dir="${HERMES_HOME:-$HOME/.hermes}/skills"
-  fi
-  install_xushi_skills_package "Hermes" "$skills_dir"
+  old_ifs="$IFS"
+  IFS=","
+  for target in $AGENT_PLUGINS; do
+    target_name="$(printf '%s' "$target" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+    case "$target_name" in
+      openclaw)
+        set -- plugins install openclaw
+        if [ -n "$OPENCLAW_PLUGINS_DIR" ]; then
+          set -- "$@" --openclaw-plugins-dir "$OPENCLAW_PLUGINS_DIR"
+        fi
+        "$BIN_DIR/xushi" "$@"
+        ;;
+      "")
+        ;;
+      *)
+        echo "Unsupported XUSHI_INSTALL_AGENT_PLUGINS target: $target" >&2
+        exit 1
+        ;;
+    esac
+  done
+  IFS="$old_ifs"
 }
 
 install_agent_skills() {
   if [ -z "$AGENT_SKILLS" ]; then
     return 0
   fi
-  old_ifs="$IFS"
-  IFS=","
-  for target in $AGENT_SKILLS; do
-    target_name="$(printf '%s' "$target" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
-    case "$target_name" in
-      openclaw) install_xushi_skills_for_openclaw ;;
-      hermes) install_xushi_skills_for_hermes ;;
-      "")
-        ;;
-      *)
-        echo "Unsupported XUSHI_INSTALL_AGENT_SKILLS target: $target" >&2
-        exit 1
-        ;;
-    esac
-  done
-  IFS="$old_ifs"
+  set -- skills install --targets "$AGENT_SKILLS"
+  if [ -n "$OPENCLAW_SKILLS_DIR" ]; then
+    set -- "$@" --openclaw-skills-dir "$OPENCLAW_SKILLS_DIR"
+  fi
+  if [ -n "$HERMES_SKILLS_DIR" ]; then
+    set -- "$@" --hermes-skills-dir "$HERMES_SKILLS_DIR"
+  fi
+  "$BIN_DIR/xushi" "$@"
 }
 
 profile_path() {
@@ -212,6 +214,7 @@ mkdir -p "$BIN_DIR"
 install_binary "xushi" "$tag"
 install_binary "xushi-daemon" "$tag"
 ensure_path_config
+install_agent_plugins
 install_agent_skills
 
 "$BIN_DIR/xushi" init --show-token
@@ -220,6 +223,9 @@ install_agent_skills
 echo ""
 echo "xushi is installed into $BIN_DIR."
 echo "Global command path has been configured for new shells."
+if [ -n "$AGENT_PLUGINS" ]; then
+  echo "Agent plugins installed for: $AGENT_PLUGINS"
+fi
 if [ -n "$AGENT_SKILLS" ]; then
   echo "Agent skills installed for: $AGENT_SKILLS"
 fi
