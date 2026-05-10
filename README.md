@@ -61,7 +61,7 @@ curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scr
 安装指定版本：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_VERSION=v0.1.4 sh
+curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_VERSION=v0.1.5 sh
 ```
 
 序时优先适配 OpenClaw 和 Hermes。安装后建议优先配置 `plugins/openclaw-xushi` 插件、OpenClaw `/hooks/agent` executor，或 Hermes agent webhook，把提醒投递回 agent 和聊天渠道。
@@ -98,7 +98,7 @@ irm https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/in
 | 能力 | 状态 | 说明 |
 | --- | --- | --- |
 | Python daemon | 可用 | FastAPI + SQLite，本地调度与 API |
-| CLI | 可用 | `init`、`doctor`、`create`、`list`、`trigger`、`runs`、`confirm-latest`、`tick`、`executors`、`notifications`、`upgrade` |
+| CLI | 可用 | `init`、`doctor`、`create`、`list`、`trigger`、`runs`、`confirm-latest`、`tick`、`executors`、`notifications`、`deliveries`、`upgrade` |
 | Web 管理台 | 可用 | 访问 daemon 根路径查看任务、运行记录和通知 |
 | OpenClaw 插件 | 可用 | `plugins/openclaw-xushi`，提供创建、查询、触发、运行记录过滤、最近确认和 callback 工具 |
 | xushi-skills | 可用 | `skills/xushi-skills`，帮助 agent 判断任务类型、生成 schema、适当追问并记录本地优化反馈草稿 |
@@ -168,6 +168,53 @@ uv run xushi-daemon
   }
 }
 ```
+
+健康习惯更适合用完成时间重新计时；夜间不打扰应配置为全局免打扰策略，而不是改掉任务语义：
+
+```json
+{
+  "quiet_policy": {
+    "enabled": true,
+    "timezone": "Asia/Shanghai",
+    "windows": [
+      {"start": "12:30", "end": "14:00", "days": "workdays"},
+      {"start": "22:30", "end": "08:00", "days": "everyday"}
+    ],
+    "behavior": "delay",
+    "aggregation": {"enabled": true, "mode": "digest", "max_items": 10}
+  }
+}
+```
+
+任务本身继续表达“完成后重新计时”：
+
+```json
+{
+  "title": "喝水",
+  "schedule": {
+    "kind": "recurring",
+    "run_at": "2026-05-10T09:00:00+08:00",
+    "rrule": "FREQ=HOURLY;INTERVAL=2",
+    "timezone": "Asia/Shanghai",
+    "anchor": "completion",
+    "missed_policy": "catch_up_latest"
+  },
+  "action": {
+    "type": "reminder",
+    "payload": {
+      "message": "该喝水了"
+    }
+  },
+  "follow_up_policy": {
+    "requires_confirmation": true,
+    "grace_period": "PT10M",
+    "interval": "PT10M",
+    "max_attempts": 3
+  }
+}
+```
+
+如果某个任务必须在免打扰时段提醒，例如凌晨赶飞机，可以在任务上设置 `quiet_policy: {"mode": "bypass"}`。
 
 ## 配置 Agent Executor
 
@@ -290,8 +337,8 @@ uv build --wheel
 发布正式版本时创建并推送 SemVer tag：
 
 ```powershell
-git tag v0.1.4
-git push origin v0.1.4
+git tag v0.1.5
+git push origin v0.1.5
 ```
 
 `.github/workflows/release.yml` 会在 tag 上执行跨平台质量检查，生成 Python wheel/sdist、Windows/macOS/Linux 单文件二进制、OpenClaw 插件 zip，并在 GitHub Release 中附带 `SHA256SUMS.txt` 校验和与自动 release notes。
@@ -300,9 +347,9 @@ git push origin v0.1.4
 
 ```powershell
 xushi upgrade status
-xushi upgrade check --version v0.1.4
+xushi upgrade check --version v0.1.5
 xushi upgrade backup
-xushi upgrade apply --version v0.1.4 --yes
+xushi upgrade apply --version v0.1.5 --yes
 xushi upgrade rollback
 ```
 

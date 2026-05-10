@@ -186,7 +186,11 @@ def test_xushi_skills_include_agent_task_type_guidance() -> None:
     assert "deadline" in task_types
     assert "floating" in task_types
     assert "requires_confirmation: true" in task_types
+    assert "quiet_policy" in task_types
+    assert "mode: \"bypass\"" in task_types
     assert "FREQ=HOURLY;INTERVAL=2" in schema_patterns
+    assert "Global Quiet Policy" in schema_patterns
+    assert '"behavior": "delay"' in schema_patterns
     assert "Common wrong pattern" in schema_patterns
     assert "下一次提醒要按固定时间算" in questions
     assert "确认完成" in questions

@@ -3,8 +3,18 @@
 from datetime import UTC, datetime
 
 from xushi.config import Settings
-from xushi.models import Executor, FollowUpPolicy, RunCallback, Schedule, TaskCreate
+from xushi.models import (
+    Executor,
+    FollowUpPolicy,
+    QuietPolicy,
+    QuietWindow,
+    RunCallback,
+    Schedule,
+    TaskCreate,
+    TaskQuietPolicy,
+)
 from xushi.service import XushiService
+from xushi.timezone import get_tzinfo
 
 
 def test_manual_trigger_creates_a_run(tmp_path) -> None:
@@ -400,6 +410,250 @@ def test_callback_run_marks_failure_and_keeps_error(tmp_path) -> None:
     assert updated is not None
     assert updated.status == "failed"
     assert updated.error == "agent failed"
+
+
+def test_global_quiet_policy_delays_delivery_without_losing_run(tmp_path) -> None:
+    shanghai = get_tzinfo("Asia/Shanghai")
+    service = XushiService(
+        Settings(
+            database_path=tmp_path / "xushi.db",
+            api_token="test-token",
+            quiet_policy=QuietPolicy(
+                enabled=True,
+                timezone="Asia/Shanghai",
+                windows=[QuietWindow(start="22:30", end="08:00")],
+            ),
+        )
+    )
+    task = service.create_task(
+        TaskCreate(
+            title="喝水",
+            schedule=Schedule(
+                kind="one_shot",
+                run_at=datetime(2026, 5, 9, 23, 0, tzinfo=shanghai),
+                timezone="Asia/Shanghai",
+            ),
+            action={"type": "reminder", "payload": {"message": "喝水"}},
+            follow_up_policy=FollowUpPolicy(requires_confirmation=True),
+        )
+    )
+
+    run = service.trigger_task(task.id, now=datetime(2026, 5, 9, 23, 0, tzinfo=shanghai))
+
+    deliveries = service.list_deliveries()
+    assert run.status == "pending_delivery"
+    assert deliveries[0].status == "delayed"
+    assert deliveries[0].deliver_at.hour == 8
+    assert service.list_notifications() == []
+
+    service.tick(now=datetime(2026, 5, 10, 8, 0, tzinfo=shanghai))
+
+    delivered_run = service.get_run(run.id)
+    assert delivered_run is not None
+    assert delivered_run.status == "pending_confirmation"
+    assert service.list_deliveries()[0].status == "delivered"
+
+
+def test_quiet_policy_aggregates_delayed_deliveries(tmp_path) -> None:
+    shanghai = get_tzinfo("Asia/Shanghai")
+    service = XushiService(
+        Settings(
+            database_path=tmp_path / "xushi.db",
+            api_token="test-token",
+            quiet_policy=QuietPolicy(
+                enabled=True,
+                timezone="Asia/Shanghai",
+                windows=[QuietWindow(start="22:30", end="08:00")],
+            ),
+        )
+    )
+    for title in ["喝水", "起立活动"]:
+        task = service.create_task(
+            TaskCreate(
+                title=title,
+                schedule=Schedule(
+                    kind="one_shot",
+                    run_at=datetime(2026, 5, 9, 23, 0, tzinfo=shanghai),
+                    timezone="Asia/Shanghai",
+                ),
+                action={"type": "reminder", "payload": {"message": title}},
+                follow_up_policy=FollowUpPolicy(requires_confirmation=True),
+            )
+        )
+        service.trigger_task(task.id, now=datetime(2026, 5, 9, 23, 0, tzinfo=shanghai))
+
+    service.process_deliveries(now=datetime(2026, 5, 10, 8, 0, tzinfo=shanghai))
+
+    deliveries = service.list_deliveries()
+    digest_deliveries = [delivery for delivery in deliveries if delivery.kind == "digest"]
+    delayed_deliveries = [delivery for delivery in deliveries if delivery.kind == "reminder"]
+    assert len(digest_deliveries) == 1
+    assert digest_deliveries[0].status == "delivered"
+    assert {delivery.status for delivery in delayed_deliveries} == {"digested"}
+    assert len(service.list_notifications()) == 1
+
+
+def test_quiet_policy_can_apply_only_on_workdays(tmp_path) -> None:
+    shanghai = get_tzinfo("Asia/Shanghai")
+    service = XushiService(
+        Settings(
+            database_path=tmp_path / "xushi.db",
+            api_token="test-token",
+            quiet_policy=QuietPolicy(
+                enabled=True,
+                timezone="Asia/Shanghai",
+                windows=[QuietWindow(start="12:30", end="14:00", days="workdays")],
+            ),
+        )
+    )
+    task = service.create_task(
+        TaskCreate(
+            title="提交材料",
+            schedule=Schedule(
+                kind="one_shot",
+                run_at=datetime(2026, 5, 11, 13, 0, tzinfo=shanghai),
+                timezone="Asia/Shanghai",
+            ),
+            action={"type": "reminder", "payload": {"message": "提交材料"}},
+        )
+    )
+
+    run = service.trigger_task(task.id, now=datetime(2026, 5, 11, 13, 0, tzinfo=shanghai))
+
+    delivery = service.list_deliveries()[0]
+    assert run.status == "pending_delivery"
+    assert delivery.status == "delayed"
+    assert delivery.deliver_at == datetime(2026, 5, 11, 14, 0, tzinfo=shanghai)
+
+
+def test_task_can_bypass_global_quiet_policy(tmp_path) -> None:
+    shanghai = get_tzinfo("Asia/Shanghai")
+    service = XushiService(
+        Settings(
+            database_path=tmp_path / "xushi.db",
+            api_token="test-token",
+            quiet_policy=QuietPolicy(
+                enabled=True,
+                timezone="Asia/Shanghai",
+                windows=[QuietWindow(start="22:30", end="08:00")],
+            ),
+        )
+    )
+    task = service.create_task(
+        TaskCreate(
+            title="凌晨赶飞机",
+            schedule=Schedule(
+                kind="one_shot",
+                run_at=datetime(2026, 5, 9, 23, 0, tzinfo=shanghai),
+                timezone="Asia/Shanghai",
+            ),
+            action={"type": "reminder", "payload": {"message": "去机场"}},
+            quiet_policy=TaskQuietPolicy(mode="bypass"),
+        )
+    )
+
+    run = service.trigger_task(task.id, now=datetime(2026, 5, 9, 23, 0, tzinfo=shanghai))
+
+    assert run.status == "succeeded"
+    assert service.list_deliveries()[0].status == "delivered"
+
+
+def test_confirming_pending_delivery_cancels_delayed_delivery(tmp_path) -> None:
+    shanghai = get_tzinfo("Asia/Shanghai")
+    service = XushiService(
+        Settings(
+            database_path=tmp_path / "xushi.db",
+            api_token="test-token",
+            quiet_policy=QuietPolicy(
+                enabled=True,
+                timezone="Asia/Shanghai",
+                windows=[QuietWindow(start="22:30", end="08:00")],
+            ),
+        )
+    )
+    task = service.create_task(
+        TaskCreate(
+            title="喝水",
+            schedule=Schedule(
+                kind="one_shot",
+                run_at=datetime(2026, 5, 9, 23, 0, tzinfo=shanghai),
+                timezone="Asia/Shanghai",
+            ),
+            action={"type": "reminder", "payload": {"message": "喝水"}},
+        )
+    )
+    run = service.trigger_task(task.id, now=datetime(2026, 5, 9, 23, 0, tzinfo=shanghai))
+
+    service.confirm_run(run.id, now=datetime(2026, 5, 9, 23, 10, tzinfo=shanghai))
+    service.tick(now=datetime(2026, 5, 10, 8, 0, tzinfo=shanghai))
+
+    updated = service.get_run(run.id)
+    assert updated is not None
+    assert updated.status == "succeeded"
+    assert service.list_deliveries()[0].status == "cancelled"
+    assert service.list_notifications() == []
+
+
+def test_archiving_task_cancels_delayed_delivery(tmp_path) -> None:
+    shanghai = get_tzinfo("Asia/Shanghai")
+    service = XushiService(
+        Settings(
+            database_path=tmp_path / "xushi.db",
+            api_token="test-token",
+            quiet_policy=QuietPolicy(
+                enabled=True,
+                timezone="Asia/Shanghai",
+                windows=[QuietWindow(start="22:30", end="08:00")],
+            ),
+        )
+    )
+    task = service.create_task(
+        TaskCreate(
+            title="喝水",
+            schedule=Schedule(
+                kind="one_shot",
+                run_at=datetime(2026, 5, 9, 23, 0, tzinfo=shanghai),
+                timezone="Asia/Shanghai",
+            ),
+            action={"type": "reminder", "payload": {"message": "喝水"}},
+        )
+    )
+    run = service.trigger_task(task.id, now=datetime(2026, 5, 9, 23, 0, tzinfo=shanghai))
+
+    service.delete_task(task.id)
+    service.tick(now=datetime(2026, 5, 10, 8, 0, tzinfo=shanghai))
+
+    updated = service.get_run(run.id)
+    assert updated is not None
+    assert updated.status == "cancelled"
+    assert service.list_deliveries()[0].status == "cancelled"
+    assert service.list_notifications() == []
+
+
+def test_task_quiet_policy_can_skip_without_global_policy(tmp_path) -> None:
+    shanghai = get_tzinfo("Asia/Shanghai")
+    service = XushiService(Settings(database_path=tmp_path / "xushi.db", api_token="test-token"))
+    task = service.create_task(
+        TaskCreate(
+            title="非紧急事项",
+            schedule=Schedule(
+                kind="one_shot",
+                run_at=datetime(2026, 5, 9, 23, 0, tzinfo=shanghai),
+                timezone="Asia/Shanghai",
+            ),
+            action={"type": "reminder", "payload": {"message": "非紧急事项"}},
+            quiet_policy=TaskQuietPolicy(
+                mode="skip",
+                windows=[QuietWindow(start="22:30", end="08:00")],
+            ),
+        )
+    )
+
+    run = service.trigger_task(task.id, now=datetime(2026, 5, 9, 23, 0, tzinfo=shanghai))
+
+    assert run.status == "cancelled"
+    assert service.list_deliveries()[0].status == "skipped"
+    assert service.list_notifications() == []
 
 
 def test_completion_anchor_waits_for_confirmation_before_next_run(tmp_path) -> None:
