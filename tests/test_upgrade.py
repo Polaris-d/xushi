@@ -89,13 +89,13 @@ def test_upgrade_apply_creates_backup_before_downloading_release_assets(tmp_path
         downloader=fake_downloader,
     )
 
-    result = manager.apply(target_version="v0.1.1", allow_running_daemon=True)
+    result = manager.apply(target_version="v0.1.2", allow_running_daemon=True)
 
     assert result.status == "succeeded"
     assert (tmp_path / "backups" / result.backup_id / "xushi.db").exists()
     assert (install_dir / "xushi").exists()
     assert (install_dir / "xushi-daemon").exists()
     assert urls == [
-        "https://github.com/Polaris-d/xushi/releases/download/v0.1.1/xushi-linux-x64",
-        "https://github.com/Polaris-d/xushi/releases/download/v0.1.1/xushi-daemon-linux-x64",
+        "https://github.com/Polaris-d/xushi/releases/download/v0.1.2/xushi-linux-x64",
+        "https://github.com/Polaris-d/xushi/releases/download/v0.1.2/xushi-daemon-linux-x64",
     ]

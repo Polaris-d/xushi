@@ -65,9 +65,25 @@ Optional environment variables:
 
 | Variable | Purpose |
 | --- | --- |
-| `XUSHI_VERSION` | Release tag to install, for example `v0.1.0`; default is latest |
+| `XUSHI_VERSION` | Release tag to install, for example `v0.1.2`; default is latest |
 | `XUSHI_BIN_DIR` | Binary install directory; default is `~/.xushi/bin` |
 | `XUSHI_REPO_SLUG` | GitHub repository slug; default is `Polaris-d/xushi` |
+| `XUSHI_INSTALL_AGENT_SKILLS` | Optional comma-separated agent skill targets; currently supports `codex` |
+
+If the user agrees before installation, install xushi and xushi-skills for Codex in one non-interactive command.
+
+Windows PowerShell:
+
+```powershell
+$env:XUSHI_INSTALL_AGENT_SKILLS = "codex"
+irm https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.ps1 | iex
+```
+
+macOS / Linux:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_INSTALL_AGENT_SKILLS=codex sh
+```
 
 ### Step 3: Verify setup
 
@@ -78,6 +94,8 @@ xushi doctor
 ```
 
 The installer also runs `xushi init --show-token` and `xushi doctor` by absolute path immediately after downloading the binaries.
+
+If `XUSHI_INSTALL_AGENT_SKILLS=codex` was provided, verify that `xushi-skills` exists under `$CODEX_HOME/skills/xushi-skills` or `~/.codex/skills/xushi-skills`.
 
 ### Step 4: Start daemon
 
@@ -185,7 +203,7 @@ xushi upgrade apply --yes
 For a specific release tag:
 
 ```bash
-xushi upgrade apply --version v0.1.1 --yes
+xushi upgrade apply --version v0.1.2 --yes
 ```
 
 The upgrade command creates a backup of the local config and SQLite database before replacing global command binaries from GitHub Releases. If the upgrade fails or the user wants to restore data, run:

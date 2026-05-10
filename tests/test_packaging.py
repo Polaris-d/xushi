@@ -76,3 +76,24 @@ def test_release_asset_script_packages_openclaw_plugin(tmp_path) -> None:
     assert "openclaw.plugin.json" in names
     assert "dist/index.js" in names
     assert all("node_modules" not in name for name in names)
+
+
+def test_release_asset_script_packages_xushi_skills(tmp_path) -> None:
+    module = _load_prepare_release_assets_module()
+    skill_dir = tmp_path / "skills" / "xushi-skills"
+    output_dir = tmp_path / "release-assets"
+    (skill_dir / "references").mkdir(parents=True)
+    (skill_dir / "__pycache__").mkdir()
+    (skill_dir / "SKILL.md").write_text("---\nname: xushi-skills\n---\n", encoding="utf-8")
+    (skill_dir / "references" / "task-types.md").write_text("types", encoding="utf-8")
+    (skill_dir / "__pycache__" / "ignored.pyc").write_text("ignored", encoding="utf-8")
+
+    archive = module.package_xushi_skills(skill_dir=skill_dir, output_dir=output_dir)
+
+    assert archive.name == "xushi-skills.zip"
+    assert archive.exists()
+    with zipfile.ZipFile(archive) as zip_file:
+        names = zip_file.namelist()
+    assert "xushi-skills/SKILL.md" in names
+    assert "xushi-skills/references/task-types.md" in names
+    assert all("__pycache__" not in name for name in names)

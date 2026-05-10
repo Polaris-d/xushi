@@ -43,12 +43,15 @@
 - 提供面向人类复制给 LLM Agent 的安装提示词和 agent 可读安装指南。
 - 提供 Windows PowerShell 与 macOS/Linux shell 安装脚本，默认从 GitHub Release 下载预编译二进制并安装到用户本地全局命令目录。
 - 安装脚本必须把 `xushi` 和 `xushi-daemon` 配置为用户级全局命令。
+- 提供 `xushi-skills` agent skill 包，帮助 agent 判断任务类型、生成任务 schema、配置跟进策略并在需求不明确时追问用户。
+- 安装脚本必须支持通过显式参数静默安装 agent skills；默认不得未经用户授权修改 agent 工具配置。
 - 提供用户手动触发的 CLI 安全升级能力；序时不得静默自动升级。
 - 手动升级必须先备份 `config.json`、SQLite 数据库和存在的 WAL/SHM sidecar，升级失败时不得丢失旧数据。
 - 手动升级必须支持查看状态、检查目标版本、创建备份、从 GitHub Release 下载替换全局命令和从备份恢复。
 - 提供 wheel 和跨平台预编译二进制构建配置，降低非 Python 用户安装门槛。
 - 提供 tag 触发的 GitHub Release 工作流，发布 wheel 与跨平台二进制产物。
 - GitHub Release 资产必须使用唯一、可读的平台命名，并包含 OpenClaw 插件包、自动 release notes 和 SHA256 校验和。
+- GitHub Release 资产必须包含 `xushi-skills.zip`，确保 agent skill 与当前二进制版本一致。
 - 提供 `.gitattributes` 控制跨平台换行，避免 shell 脚本和 CI 配置在 Windows 开发环境中被破坏。
 - 项目采用 MIT License 开源。
 - 提供贡献指南、安全策略、Issue 模板和 PR 模板，降低外部协作成本。
@@ -107,3 +110,4 @@
 | 2026-05-10 | 新增 | 增加用户手动触发的 CLI 安全升级需求，要求升级前备份配置和 SQLite 数据，并支持 rollback。 |
 | 2026-05-10 | 调整 | 安装与升级链路调整为从 GitHub Release 下载二进制，并配置 `xushi` / `xushi-daemon` 为全局命令。 |
 | 2026-05-10 | 调整 | Hermes executor 从预留未实现调整为可配置 HTTP agent webhook 投递。 |
+| 2026-05-10 | 新增 | 增加 `xushi-skills` agent skill 需求，并要求安装脚本支持经用户授权后的静默安装参数。 |

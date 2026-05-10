@@ -56,6 +56,12 @@ macOS / Linux:
 curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | sh
 ```
 
+If the agent has already asked for permission, it can silently install `xushi-skills` for Codex as part of the same install:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_INSTALL_AGENT_SKILLS=codex sh
+```
+
 ## Why xushi
 
 | Feature | Value |
@@ -147,9 +153,9 @@ xushi never upgrades silently. Run upgrades explicitly:
 
 ```powershell
 xushi upgrade status
-xushi upgrade check --version v0.1.1
+xushi upgrade check --version v0.1.2
 xushi upgrade backup
-xushi upgrade apply --version v0.1.1 --yes
+xushi upgrade apply --version v0.1.2 --yes
 xushi upgrade rollback
 ```
 

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Xushi Skills"
+  short_description: "Create correct xushi tasks from reminders"
+  default_prompt: "Use $xushi-skills to turn my reminder request into a correct xushi task."
+
+policy:
+  allow_implicit_invocation: true
