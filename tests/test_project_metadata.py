@@ -10,6 +10,7 @@ def test_readme_has_github_friendly_install_entrypoints() -> None:
 
     assert '<p align="center">' in readme
     assert "给人类看的" in readme
+    assert "优先适配 OpenClaw 和 Hermes" in readme
     assert "Install and configure xushi by following the instructions here:" in readme
     assert (
         "https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/docs/guide/"
@@ -32,6 +33,15 @@ def test_installation_guide_is_agent_readable() -> None:
     assert "# Installation" in guide
     assert "## 给人类看的" in guide
     assert "## For LLM Agents" in guide
+    assert "xushi prioritizes OpenClaw and Hermes" in guide
+    assert "supports `openclaw` and `hermes`" in guide
+    assert "XUSHI_INSTALL_AGENT_SKILLS=openclaw,hermes" in guide
+    assert "XUSHI_OPENCLAW_SKILLS_DIR" in guide
+    assert "XUSHI_HERMES_SKILLS_DIR" in guide
+    assert "OPENCLAW_SKILLS_DIR" in guide
+    assert "HERMES_SKILLS_DIR" in guide
+    assert "--openclaw-skills-dir" in guide
+    assert "--hermes-skills-dir" in guide
     assert "xushi doctor" in guide
 
 
@@ -49,6 +59,22 @@ def test_install_scripts_use_safe_defaults() -> None:
     assert "ensure_path_config" in sh
     assert "XUSHI_INSTALL_AGENT_SKILLS" in ps1
     assert "XUSHI_INSTALL_AGENT_SKILLS" in sh
+    assert "XUSHI_OPENCLAW_SKILLS_DIR" in ps1
+    assert "XUSHI_OPENCLAW_SKILLS_DIR" in sh
+    assert "XUSHI_HERMES_SKILLS_DIR" in ps1
+    assert "XUSHI_HERMES_SKILLS_DIR" in sh
+    assert "OPENCLAW_SKILLS_DIR" in ps1
+    assert "OPENCLAW_SKILLS_DIR" in sh
+    assert "HERMES_SKILLS_DIR" in ps1
+    assert "HERMES_SKILLS_DIR" in sh
+    assert "--openclaw-skills-dir" in sh
+    assert "--hermes-skills-dir" in sh
+    assert "openclaw" in ps1
+    assert "hermes" in ps1
+    assert "openclaw" in sh
+    assert "hermes" in sh
+    assert "CODEX_HOME" not in ps1
+    assert "CODEX_HOME" not in sh
     assert "xushi-skills.zip" in ps1
     assert "xushi-skills.zip" in sh
 
@@ -149,7 +175,10 @@ def test_xushi_skills_include_agent_task_type_guidance() -> None:
         ROOT / "skills" / "xushi-skills" / "references" / "optimization-notes.md"
     ).read_text(encoding="utf-8")
 
+    assert not (ROOT / "skills" / "xushi-skills" / "agents" / "openai.yaml").exists()
     assert "name: xushi-skills" in skill
+    assert "OpenClaw/Hermes-priority" in skill
+    assert "Prefer OpenClaw and Hermes integration paths" in skill
     assert "anchor: \"completion\"" in skill
     assert "confirming the latest pending run" in skill
     assert "喝水" in task_types

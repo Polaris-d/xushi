@@ -2,11 +2,12 @@
 
 ## 1. 项目定位
 
-序时是 AI agent 优先的本地化日程管理与排期工具。第一阶段重点服务 OpenClaw、Hermes 等 agent 工具，提供可靠的本地调度、提醒、补偿、跟进和任务审计能力。
+序时是优先适配 OpenClaw 和 Hermes 的本地化日程管理与排期工具，同时兼容其他 agent 工具，提供可靠的本地调度、提醒、补偿、跟进和任务审计能力。
 
 ## 2. 目标用户
 
-- 已使用 OpenClaw、Hermes 等 agent 工具的个人用户。
+- 已使用 OpenClaw 或 Hermes 的个人用户，这是 v1 的重点适配人群。
+- 已使用其他 agent 工具，并希望复用同一本地调度底座的个人用户。
 - 需要本地可靠提醒、循环任务和 agent 定时执行能力的开发者。
 - 希望通过开源工具管理个人工作生活排期的高级用户。
 
@@ -43,8 +44,11 @@
 - 提供面向人类复制给 LLM Agent 的安装提示词和 agent 可读安装指南。
 - 提供 Windows PowerShell 与 macOS/Linux shell 安装脚本，默认从 GitHub Release 下载预编译二进制并安装到用户本地全局命令目录。
 - 安装脚本必须把 `xushi` 和 `xushi-daemon` 配置为用户级全局命令。
-- 提供 `xushi-skills` agent skill 包，帮助 agent 判断任务类型、生成任务 schema、配置跟进策略并在需求不明确时追问用户。
-- 安装脚本必须支持通过显式参数静默安装 agent skills；默认不得未经用户授权修改 agent 工具配置。
+- 安装指南必须优先说明 OpenClaw 插件、OpenClaw `/hooks/agent` executor 和 Hermes agent webhook 配置。
+- 提供 `xushi-skills` 任务类型指南包，帮助 agent 判断任务类型、生成任务 schema、配置跟进策略并在需求不明确时追问用户。
+- 安装脚本必须支持通过显式参数安装辅助 skill 目标；当前仅支持 `openclaw` 和 `hermes`。文档不得再提供 Codex skill 安装目标。
+- 安装脚本必须允许 agent 通过 `XUSHI_OPENCLAW_SKILLS_DIR` / `XUSHI_HERMES_SKILLS_DIR` 或已有的 `OPENCLAW_SKILLS_DIR` / `HERMES_SKILLS_DIR` 指定自定义 skills 根目录，避免不同 agent 目录调整后安装到错误位置。
+- 默认不得未经用户授权修改 agent 工具配置。
 - 提供用户手动触发的 CLI 安全升级能力；序时不得静默自动升级。
 - 手动升级必须先备份 `config.json`、SQLite 数据库和存在的 WAL/SHM sidecar，升级失败时不得丢失旧数据。
 - 手动升级必须支持查看状态、检查目标版本、创建备份、从 GitHub Release 下载替换全局命令和从备份恢复。
@@ -116,3 +120,5 @@
 | 2026-05-10 | 调整 | Hermes executor 从预留未实现调整为可配置 HTTP agent webhook 投递。 |
 | 2026-05-10 | 新增 | 增加 `xushi-skills` agent skill 需求，并要求安装脚本支持经用户授权后的静默安装参数。 |
 | 2026-05-10 | 新增 | 增加运行记录过滤、按任务确认最近待确认运行、跟进取消状态和 `xushi-skills` 优化反馈记录要求。 |
+| 2026-05-10 | 更正 | 明确安装文档优先适配 OpenClaw 和 Hermes；暂时移除 Codex skill 安装目标，仅保留 OpenClaw/Hermes skills 安装。 |
+| 2026-05-10 | 明确 | `xushi-skills` 安装支持 OpenClaw/Hermes 自定义 skills 根目录，兼容 agent 自有目录环境变量。 |

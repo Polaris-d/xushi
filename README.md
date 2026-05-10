@@ -27,13 +27,13 @@
   <img alt="agent first" src="https://img.shields.io/badge/agent--first-local%20scheduler-111827">
 </p>
 
-序时是给 OpenClaw、Hermes、Claude Code、Cursor 等 agent 工具使用的本地日程与排期底座。它把提醒、调度、补偿、跟进和运行日志放在本机 daemon 中，让 agent 不需要自己可靠常驻，也能创建结构化、可审计、可确认的日常任务。
+序时是优先适配 OpenClaw 和 Hermes 的本地日程与排期底座，也兼容 Claude Code、Cursor 等 agent 工具。它把提醒、调度、补偿、跟进和运行日志放在本机 daemon 中，让 agent 不需要自己可靠常驻，也能创建结构化、可审计、可确认的日常任务。
 
 > GitHub 仓库描述建议：AI agent 优先的本地日程与排期底座，提供本机 daemon、结构化任务、可靠提醒、补偿跟进、OpenClaw/Hermes 投递和可审计运行记录。
 
 ## 给人类看的
 
-复制并粘贴以下提示词到你的 LLM Agent，例如 Claude Code、AmpCode、Cursor、OpenClaw：
+复制并粘贴以下提示词到你的 LLM Agent；如果你使用 OpenClaw 或 Hermes，优先从它们的集成环境里执行：
 
 ```text
 Install and configure xushi by following the instructions here:
@@ -61,19 +61,23 @@ curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scr
 安装指定版本：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_VERSION=v0.1.3 sh
+curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_VERSION=v0.1.4 sh
 ```
 
-如果 agent 已经征得用户同意，也可以同时静默安装 `xushi-skills` 到 Codex，帮助 agent 正确选择喝水、起立活动、截止任务等任务类型：
+序时优先适配 OpenClaw 和 Hermes。安装后建议优先配置 `plugins/openclaw-xushi` 插件、OpenClaw `/hooks/agent` executor，或 Hermes agent webhook，把提醒投递回 agent 和聊天渠道。
+
+可选：如果用户希望同时安装任务类型指南，可以设置 `XUSHI_INSTALL_AGENT_SKILLS=openclaw,hermes`。这会把同一套 `xushi-skills` 安装到 OpenClaw 和 Hermes 各自的 skills 目录：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_INSTALL_AGENT_SKILLS=codex sh
+curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_INSTALL_AGENT_SKILLS=openclaw,hermes sh
 ```
+
+如果你的 OpenClaw 或 Hermes skills 目录做过调整，可以设置 `XUSHI_OPENCLAW_SKILLS_DIR` / `XUSHI_HERMES_SKILLS_DIR` 指定 skills 根目录；安装器也会兼容已有的 `OPENCLAW_SKILLS_DIR` / `HERMES_SKILLS_DIR`。
 
 Windows PowerShell：
 
 ```powershell
-$env:XUSHI_INSTALL_AGENT_SKILLS = "codex"
+$env:XUSHI_INSTALL_AGENT_SKILLS = "openclaw,hermes"
 irm https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.ps1 | iex
 ```
 
@@ -286,8 +290,8 @@ uv build --wheel
 发布正式版本时创建并推送 SemVer tag：
 
 ```powershell
-git tag v0.1.3
-git push origin v0.1.3
+git tag v0.1.4
+git push origin v0.1.4
 ```
 
 `.github/workflows/release.yml` 会在 tag 上执行跨平台质量检查，生成 Python wheel/sdist、Windows/macOS/Linux 单文件二进制、OpenClaw 插件 zip，并在 GitHub Release 中附带 `SHA256SUMS.txt` 校验和与自动 release notes。
@@ -296,9 +300,9 @@ git push origin v0.1.3
 
 ```powershell
 xushi upgrade status
-xushi upgrade check --version v0.1.3
+xushi upgrade check --version v0.1.4
 xushi upgrade backup
-xushi upgrade apply --version v0.1.3 --yes
+xushi upgrade apply --version v0.1.4 --yes
 xushi upgrade rollback
 ```
 
