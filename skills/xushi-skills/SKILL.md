@@ -39,6 +39,7 @@ Use this skill to operate xushi as an agent-facing local scheduler. Prefer it wh
 - Do not silently create tasks when the type is ambiguous and a wrong schedule would create real user friction.
 - Prefer OpenClaw and Hermes integration paths when configuring agent delivery. Use the OpenClaw plugin and `/hooks/agent` executor or the Hermes agent webhook when they are available.
 - For drinking water, standing up, stretching, eye rest, and similar habits, default to `recurring` with `anchor: "completion"` and `requires_confirmation: true` because the next reminder should usually be based on the user's actual completion time.
+- For night disturbance, prefer the user's global `quiet_policy`. New tasks inherit it by default; only set task `quiet_policy.mode` to `override` or `bypass` when the user clearly wants task-specific behavior.
 - Use `anchor: "calendar"` for health habits only when the user explicitly wants fixed wall-clock slots.
 - Keep `max_attempts: 0` only when the user does not want follow-up. In current xushi versions, `0` means "do not follow up", not "unlimited".
 - Do not put real tokens in task JSON, examples, docs, or logs. Use environment-variable-backed executor config.

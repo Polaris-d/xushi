@@ -228,6 +228,13 @@ def notifications() -> None:
     _echo_json(events)
 
 
+@app.command()
+def deliveries() -> None:
+    """列出投递计划。"""
+    items = [delivery.model_dump(mode="json") for delivery in _service().list_deliveries()]
+    _echo_json(items)
+
+
 @upgrade_app.command("status")
 def upgrade_status(
     config_path: Annotated[

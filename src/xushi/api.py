@@ -153,6 +153,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             [event.model_dump(mode="json") for event in service.list_notifications()]
         )
 
+    @app.get("/api/v1/deliveries", dependencies=[Depends(require_token)])
+    def list_deliveries() -> dict[str, Any]:
+        return api_response(
+            [delivery.model_dump(mode="json") for delivery in service.list_deliveries()]
+        )
+
     @app.post("/api/v1/runs/{run_id}/confirm", dependencies=[Depends(require_token)])
     def confirm_run(run_id: str) -> dict[str, Any]:
         run = service.confirm_run(run_id)

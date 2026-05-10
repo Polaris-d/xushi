@@ -38,6 +38,7 @@ Good for drinking water, standing up, stretching, eye rest, and similar tasks.
 Key points:
 
 - Use `anchor: "completion"` when the next reminder should reset after confirmation.
+- Let normal tasks inherit the user's global `quiet_policy` for night-time delay and digest aggregation.
 - Keep `requires_confirmation: true`.
 - In current xushi versions, `max_attempts: 0` disables follow-up.
 - If the user says they completed the habit, confirm the latest pending run for that task. Do not only reply in chat.
@@ -61,6 +62,34 @@ Common wrong pattern:
 ```
 
 This is wrong for most "每 2 小时喝水" requests because the reminder does not reset after the user actually drinks water, and xushi receives no completion signal.
+
+## Global Quiet Policy
+
+Use this in `~/.xushi/config.json` when the user wants default do-not-disturb behavior for all tasks:
+
+```json
+{
+  "quiet_policy": {
+    "enabled": true,
+    "timezone": "Asia/Shanghai",
+    "windows": [
+      {"start": "12:30", "end": "14:00", "days": "workdays"},
+      {"start": "22:30", "end": "08:00", "days": "everyday"}
+    ],
+    "behavior": "delay",
+    "aggregation": {"enabled": true, "mode": "digest", "max_items": 10}
+  }
+}
+```
+
+Task-level override for an explicit night reminder:
+
+```json
+{
+  "title": "凌晨赶飞机",
+  "quiet_policy": {"mode": "bypass"}
+}
+```
 
 ## Fixed Calendar Recurrence
 

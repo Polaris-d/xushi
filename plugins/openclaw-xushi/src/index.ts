@@ -78,7 +78,7 @@ export default definePluginEntry({
     api.registerTool({
       name: "xushi_create_task",
       description:
-        "创建结构化序时任务。请先把用户自然语言转换为 xushi task schema：schedule 必须包含 timezone；尽快任务用 asap，一次性任务用 ISO run_at，循环任务用 RRULE。若用户希望提醒通过 OpenClaw/飞书等 agent 渠道送达，请先在 ~/.xushi/config.json 配置 executor，并在 task.action.executor_id 中引用它。",
+        "创建结构化序时任务。请先把用户自然语言转换为 xushi task schema：schedule 必须包含 timezone；尽快任务用 asap，一次性任务用 ISO run_at，循环任务用 RRULE。免打扰属于 quiet_policy / delivery 层，普通任务默认继承全局 quiet_policy；明确夜间提醒才设置 quiet_policy.mode=bypass。若用户希望提醒通过 OpenClaw/飞书等 agent 渠道送达，请先在 ~/.xushi/config.json 配置 executor，并在 task.action.executor_id 中引用它。",
       parameters: Type.Object({
         task: Type.Record(Type.String(), Type.Any(), {
           description: "符合 xushi TaskCreate schema 的任务 JSON。",
@@ -135,6 +135,7 @@ export default definePluginEntry({
         task_id: Type.Optional(Type.String({ description: "按任务 ID 过滤。" })),
         status: Type.Optional(
           Type.Union([
+            Type.Literal("pending_delivery"),
             Type.Literal("succeeded"),
             Type.Literal("failed"),
             Type.Literal("pending_confirmation"),
@@ -155,6 +156,16 @@ export default definePluginEntry({
         },
       ) {
         return textResult(await xushiRequest(config, withQuery("/api/v1/runs", params)));
+      },
+    });
+
+    api.registerTool({
+      name: "xushi_list_deliveries",
+      description:
+        "列出 xushi 投递计划。用于查看 run 是否已投递、被免打扰延迟、被摘要聚合、跳过、静默或失败。",
+      parameters: Type.Object({}),
+      async execute() {
+        return textResult(await xushiRequest(config, "/api/v1/deliveries"));
       },
     });
 

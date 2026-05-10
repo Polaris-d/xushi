@@ -28,6 +28,7 @@
       "xushi_get_task",
       "xushi_trigger_task",
       "xushi_list_runs",
+      "xushi_list_deliveries",
       "xushi_confirm_run",
       "xushi_confirm_latest_run",
       "xushi_callback_run",

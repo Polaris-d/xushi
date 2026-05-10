@@ -183,6 +183,19 @@ def test_list_notifications_endpoint(tmp_path) -> None:
     assert response.json()["data"] == []
 
 
+def test_list_deliveries_endpoint(tmp_path) -> None:
+    settings = Settings(database_path=tmp_path / "xushi.db", api_token="test-token")
+    client = TestClient(create_app(settings))
+
+    response = client.get(
+        "/api/v1/deliveries",
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"] == []
+
+
 def test_executor_api_is_read_only_and_uses_config_file(tmp_path) -> None:
     settings = Settings(
         database_path=tmp_path / "xushi.db",

@@ -6,8 +6,12 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from xushi.config import Settings
+from xushi.delivery import QuietPolicyEngine, summarize_deliveries
 from xushi.executors import ExecutorRegistry
 from xushi.models import (
+    Action,
+    Delivery,
+    DeliveryStatus,
     Executor,
     Run,
     RunCallback,
@@ -21,7 +25,12 @@ from xushi.notifications import NotificationDispatcher, NotificationEvent
 from xushi.scheduler import Scheduler
 from xushi.storage import SQLiteStore
 
-ACTIVE_RUN_STATUSES = {RunStatus.PENDING_CONFIRMATION.value, RunStatus.FOLLOWING_UP.value}
+ACTIVE_RUN_STATUSES = {
+    RunStatus.PENDING_DELIVERY.value,
+    RunStatus.PENDING_CONFIRMATION.value,
+    RunStatus.FOLLOWING_UP.value,
+}
+DELIVERABLE_STATUSES = {DeliveryStatus.PENDING.value, DeliveryStatus.DELAYED.value}
 
 
 class XushiService:
@@ -31,6 +40,7 @@ class XushiService:
         self.settings = settings
         self.store = SQLiteStore(settings.database_path)
         self.scheduler = Scheduler()
+        self.quiet_policy = QuietPolicyEngine(settings.quiet_policy, self.scheduler.calendar)
         self.notifications = NotificationDispatcher()
         self.executors = ExecutorRegistry(self.notifications)
         self._executor_map = {
@@ -84,29 +94,20 @@ class XushiService:
         if task is None:
             raise KeyError(task_id)
         scheduled_for = now or datetime.now(tz=UTC)
-        executor = None
-        if task.action.executor_id:
-            executor = self._get_executor(task.action.executor_id)
-        task.action.payload.setdefault("title", task.title)
-        task.action.payload.setdefault("task_id", task.id)
-        result = self.executors.execute(task.action, executor)
-        status = RunStatus.PENDING_CONFIRMATION
-        if not task.follow_up_policy.requires_confirmation:
-            status = RunStatus.SUCCEEDED if result.get("delivered") else RunStatus.FAILED
         run = Run(
             id=f"run_{uuid4().hex}",
             task_id=task.id,
             scheduled_for=scheduled_for,
             started_at=scheduled_for,
-            finished_at=datetime.now(tz=UTC),
-            status=status,
-            result=result,
-            error=result.get("error"),
+            status=RunStatus.PENDING_DELIVERY,
         )
-        notification_id = result.get("notification_id")
-        if notification_id:
-            self._save_notification_from_result(result, run.id, task.id, "reminder")
-        return self.store.save_run(run)
+        self.store.save_run(run)
+        action = self._action_for_run(task, run, kind="reminder")
+        delivery = self._create_delivery(task, run, action, kind="reminder", due_at=scheduled_for)
+        if delivery.status in {DeliveryStatus.SKIPPED, DeliveryStatus.SILENCED}:
+            return self._complete_prevented_delivery(run, task, delivery, scheduled_for)
+        self.process_deliveries(scheduled_for)
+        return self.get_run(run.id) or run
 
     def confirm_run(self, run_id: str, now: datetime | None = None) -> Run | None:
         """确认运行记录已完成。"""
@@ -118,6 +119,7 @@ class XushiService:
         run.confirmed_at = confirmed_at
         run.finished_at = confirmed_at
         self.store.save_run(run)
+        self._cancel_deliveries_for_run(run.id, confirmed_at, "confirmed")
 
         if run.origin_run_id:
             origin = self.store.get_run(run.origin_run_id)
@@ -127,6 +129,7 @@ class XushiService:
                 origin.finished_at = confirmed_at
                 origin.result = {**origin.result, "confirmed_by_follow_up": run.id}
                 self.store.save_run(origin)
+                self._cancel_deliveries_for_run(origin.id, confirmed_at, "confirmed_by_follow_up")
             self._cancel_follow_ups_for_origin(
                 run.origin_run_id,
                 confirmed_at,
@@ -169,6 +172,8 @@ class XushiService:
         if callback.status == RunStatus.SUCCEEDED:
             run.confirmed_at = finished_at
         self.store.save_run(run)
+        if callback.status == RunStatus.SUCCEEDED:
+            self._cancel_deliveries_for_run(run.id, finished_at, "callback_succeeded")
 
         if run.origin_run_id and callback.status == RunStatus.SUCCEEDED:
             origin = self.store.get_run(run.origin_run_id)
@@ -178,6 +183,7 @@ class XushiService:
                 origin.finished_at = finished_at
                 origin.result = {**origin.result, "confirmed_by_follow_up": run.id}
                 self.store.save_run(origin)
+                self._cancel_deliveries_for_run(origin.id, finished_at, "confirmed_by_follow_up")
             self._cancel_follow_ups_for_origin(
                 run.origin_run_id,
                 finished_at,
@@ -195,6 +201,7 @@ class XushiService:
     def tick(self, now: datetime | None = None) -> list[Run]:
         """扫描并触发到期任务。"""
         current = now or datetime.now(tz=UTC)
+        self.process_deliveries(current)
         created: list[Run] = []
         for task in self.list_tasks():
             if task.status != TaskStatus.ACTIVE:
@@ -211,6 +218,54 @@ class XushiService:
                 created.append(self.trigger_task(task.id, now=scheduled_for))
         created.extend(self.process_follow_ups(current))
         return created
+
+    def process_deliveries(self, now: datetime | None = None) -> list[Delivery]:
+        """投递到期的提醒或免打扰摘要。"""
+        current = now or datetime.now(tz=UTC)
+        due_deliveries = [
+            delivery
+            for delivery in self.store.list_deliveries()
+            if delivery.status in DELIVERABLE_STATUSES and delivery.deliver_at <= current
+        ]
+        deliverable: list[Delivery] = []
+        grouped_delivery_ids: set[str] = set()
+        processed: list[Delivery] = []
+
+        for delivery in due_deliveries:
+            if self._delivery_is_still_needed(delivery):
+                deliverable.append(delivery)
+                continue
+            processed.append(
+                self._cancel_delivery(
+                    delivery,
+                    current,
+                    "run_no_longer_waiting_delivery",
+                )
+            )
+
+        groups: dict[tuple[str, str], list[Delivery]] = {}
+        for delivery in deliverable:
+            task = self.get_task(delivery.task_id) if delivery.task_id else None
+            if (
+                delivery.status == DeliveryStatus.DELAYED
+                and task is not None
+                and self.quiet_policy.should_aggregate(task)
+            ):
+                key = (delivery.action.type, delivery.action.executor_id or "system")
+                groups.setdefault(key, []).append(delivery)
+
+        for group in groups.values():
+            if len(group) < 2:
+                continue
+            digest = self._execute_digest(group, current)
+            processed.append(digest)
+            grouped_delivery_ids.update(delivery.id for delivery in group)
+
+        for delivery in deliverable:
+            if delivery.id in grouped_delivery_ids:
+                continue
+            processed.append(self._execute_delivery(delivery, current))
+        return processed
 
     def process_follow_ups(self, now: datetime | None = None) -> list[Run]:
         """扫描未确认运行记录并生成跟进提醒。"""
@@ -242,34 +297,32 @@ class XushiService:
             )
             if next_at is None:
                 continue
-            executor = None
-            if task.action.executor_id:
-                executor = self._get_executor(task.action.executor_id)
-            task.action.payload["title"] = task.title
-            task.action.payload["task_id"] = task.id
-            task.action.payload["kind"] = "follow_up"
-            task.action.payload["message"] = f"{task.title} 仍未确认完成, 请确认或调整排期。"
-            result = self.executors.execute(task.action, executor)
             follow_up_run = Run(
                 id=f"run_{uuid4().hex}",
                 task_id=task.id,
                 origin_run_id=run.id,
                 scheduled_for=next_at,
                 started_at=current,
-                finished_at=current,
-                status=RunStatus.FOLLOWING_UP,
-                result={
-                    **result,
-                    "follow_up": True,
-                    "ask_reschedule": task.follow_up_policy.ask_reschedule_on_timeout,
-                },
-                error=result.get("error"),
+                status=RunStatus.PENDING_DELIVERY,
+                result={"follow_up": True},
                 follow_up_attempts=attempts + 1,
             )
-            notification_id = result.get("notification_id")
-            if notification_id:
-                self._save_notification_from_result(result, follow_up_run.id, task.id, "follow_up")
-            created.append(self.store.save_run(follow_up_run))
+            self.store.save_run(follow_up_run)
+            action = self._action_for_run(task, follow_up_run, kind="follow_up")
+            delivery = self._create_delivery(
+                task,
+                follow_up_run,
+                action,
+                kind="follow_up",
+                due_at=next_at,
+            )
+            if delivery.status in {DeliveryStatus.SKIPPED, DeliveryStatus.SILENCED}:
+                created.append(
+                    self._complete_prevented_delivery(follow_up_run, task, delivery, current)
+                )
+                continue
+            self.process_deliveries(current)
+            created.append(self.get_run(follow_up_run.id) or follow_up_run)
         return created
 
     def list_runs(
@@ -312,9 +365,236 @@ class XushiService:
         """列出通知事件。"""
         return self.store.list_notifications()
 
+    def list_deliveries(self) -> list[Delivery]:
+        """列出投递计划。"""
+        return self.store.list_deliveries()
+
     def _get_executor(self, executor_id: str) -> Executor | None:
         """按 ID 获取启用的 executor 配置。"""
         return self._executor_map.get(executor_id)
+
+    def _delivery_is_still_needed(self, delivery: Delivery) -> bool:
+        """判断投递计划是否仍然对应一个等待投递的运行记录。"""
+        if delivery.run_id is None:
+            return True
+        run = self.get_run(delivery.run_id)
+        return run is not None and run.status == RunStatus.PENDING_DELIVERY
+
+    def _cancel_delivery(
+        self,
+        delivery: Delivery,
+        cancelled_at: datetime,
+        reason: str,
+    ) -> Delivery:
+        """取消一条尚未执行的投递计划。"""
+        delivery.status = DeliveryStatus.CANCELLED
+        delivery.updated_at = cancelled_at
+        delivery.result = {**delivery.result, "cancelled_reason": reason}
+        self.store.save_delivery(delivery)
+        return delivery
+
+    def _cancel_deliveries_for_run(
+        self,
+        run_id: str,
+        cancelled_at: datetime,
+        reason: str,
+    ) -> None:
+        """取消某运行记录下尚未执行的投递计划。"""
+        for delivery in self.store.list_deliveries():
+            if delivery.run_id != run_id or delivery.status not in DELIVERABLE_STATUSES:
+                continue
+            self._cancel_delivery(delivery, cancelled_at, reason)
+
+    def _action_for_run(self, task: Task, run: Run, *, kind: str) -> Action:
+        """生成投递时使用的动作快照。"""
+        payload = dict(task.action.payload)
+        payload["title"] = task.title
+        payload["task_id"] = task.id
+        payload["run_id"] = run.id
+        payload["kind"] = kind
+        if kind == "follow_up":
+            payload["message"] = f"{task.title} 仍未确认完成, 请确认或调整排期。"
+        return Action(type=task.action.type, executor_id=task.action.executor_id, payload=payload)
+
+    def _create_delivery(
+        self,
+        task: Task,
+        run: Run,
+        action: Action,
+        *,
+        kind: str,
+        due_at: datetime,
+    ) -> Delivery:
+        """为一次到期事实创建投递计划。"""
+        plan = self.quiet_policy.plan(task, due_at)
+        now = datetime.now(tz=UTC)
+        delivery = Delivery(
+            id=f"delivery_{uuid4().hex}",
+            run_id=run.id,
+            task_id=task.id,
+            kind=kind,
+            action=action,
+            due_at=due_at,
+            deliver_at=plan.deliver_at,
+            status=DeliveryStatus(plan.status),
+            reason=plan.reason,
+            created_at=now,
+            updated_at=now,
+        )
+        run.result = {
+            **run.result,
+            "delivery_id": delivery.id,
+            "delivery_status": delivery.status,
+            "deliver_at": delivery.deliver_at.isoformat(),
+        }
+        self.store.save_run(run)
+        return self.store.save_delivery(delivery)
+
+    def _complete_prevented_delivery(
+        self,
+        run: Run,
+        task: Task,
+        delivery: Delivery,
+        finished_at: datetime,
+    ) -> Run:
+        """处理 skip/silent 等不会主动投递的计划。"""
+        delivery.updated_at = finished_at
+        delivery.result = {"prevented_by": delivery.reason or "quiet_policy"}
+        self.store.save_delivery(delivery)
+
+        if delivery.status == DeliveryStatus.SKIPPED:
+            run.status = RunStatus.CANCELLED
+            run.error = "delivery skipped by quiet policy"
+        elif task.follow_up_policy.requires_confirmation and delivery.kind == "reminder":
+            run.status = RunStatus.PENDING_CONFIRMATION
+        else:
+            run.status = RunStatus.SUCCEEDED
+        run.finished_at = finished_at
+        run.result = {
+            **run.result,
+            "delivery_status": delivery.status,
+            "quiet_policy_reason": delivery.reason,
+        }
+        return self.store.save_run(run)
+
+    def _execute_delivery(self, delivery: Delivery, current: datetime) -> Delivery:
+        """执行单条投递计划并更新对应运行记录。"""
+        executor = (
+            self._get_executor(delivery.action.executor_id)
+            if delivery.action.executor_id
+            else None
+        )
+        result = self.executors.execute(delivery.action, executor)
+        delivered = bool(result.get("delivered"))
+        delivery.status = DeliveryStatus.DELIVERED if delivered else DeliveryStatus.FAILED
+        delivery.result = result
+        delivery.error = result.get("error")
+        delivery.updated_at = current
+        self.store.save_delivery(delivery)
+
+        notification_id = result.get("notification_id")
+        if notification_id:
+            self._save_notification_from_result(
+                result,
+                delivery.run_id,
+                delivery.task_id,
+                delivery.kind,
+            )
+        self._update_run_after_delivery(delivery, result, current)
+        return delivery
+
+    def _execute_digest(self, deliveries: list[Delivery], current: datetime) -> Delivery:
+        """将多条延迟提醒合并成一条摘要投递。"""
+        first = deliveries[0]
+        items: list[tuple[str, datetime]] = []
+        run_ids: list[str] = []
+        for delivery in deliveries:
+            title = str(delivery.action.payload.get("title") or "序时提醒")
+            items.append((title, delivery.due_at))
+            if delivery.run_id:
+                run_ids.append(delivery.run_id)
+
+        task = self.get_task(first.task_id) if first.task_id else None
+        max_items = 10
+        if task is not None:
+            max_items = self.quiet_policy.effective_policy(task).aggregation.max_items
+        action = Action(
+            type=first.action.type,
+            executor_id=first.action.executor_id,
+            payload={
+                "title": "序时免打扰摘要",
+                "message": summarize_deliveries(items, max_items),
+                "kind": "digest",
+                "run_ids": run_ids,
+            },
+        )
+        digest = Delivery(
+            id=f"delivery_{uuid4().hex}",
+            kind="digest",
+            action=action,
+            due_at=min(delivery.due_at for delivery in deliveries),
+            deliver_at=current,
+            status=DeliveryStatus.PENDING,
+            digest_run_ids=run_ids,
+            created_at=current,
+            updated_at=current,
+        )
+        self.store.save_delivery(digest)
+        executed = self._execute_delivery(digest, current)
+        delivered = executed.status == DeliveryStatus.DELIVERED
+
+        for delivery in deliveries:
+            delivery.status = DeliveryStatus.DIGESTED if delivered else DeliveryStatus.FAILED
+            delivery.grouped_delivery_id = digest.id
+            delivery.result = {
+                "digest_delivery_id": digest.id,
+                "digest_status": executed.status,
+            }
+            delivery.error = executed.error
+            delivery.updated_at = current
+            self.store.save_delivery(delivery)
+            result = {
+                **executed.result,
+                "delivered": delivered,
+                "digest_delivery_id": digest.id,
+            }
+            self._update_run_after_delivery(delivery, result, current)
+        return executed
+
+    def _update_run_after_delivery(
+        self,
+        delivery: Delivery,
+        result: dict[str, object],
+        delivered_at: datetime,
+    ) -> None:
+        """根据投递结果更新 run 状态。"""
+        if delivery.run_id is None or delivery.task_id is None:
+            return
+        run = self.get_run(delivery.run_id)
+        task = self.get_task(delivery.task_id)
+        if run is None or task is None:
+            return
+
+        delivered = bool(result.get("delivered"))
+        if not delivered:
+            run.status = RunStatus.FAILED
+            run.error = str(result.get("error") or "delivery failed")
+        elif delivery.kind == "follow_up":
+            run.status = RunStatus.FOLLOWING_UP
+        elif task.follow_up_policy.requires_confirmation:
+            run.status = RunStatus.PENDING_CONFIRMATION
+        else:
+            run.status = RunStatus.SUCCEEDED
+        run.finished_at = delivered_at
+        run.result = {
+            **run.result,
+            **result,
+            "delivery_id": delivery.id,
+            "delivery_status": delivery.status,
+            "delivered_at": delivered_at.isoformat(),
+        }
+        run.error = run.error or result.get("error")
+        self.store.save_run(run)
 
     def _group_follow_ups_by_origin(self, runs: list[Run]) -> dict[str, list[Run]]:
         grouped: dict[str, list[Run]] = {}
@@ -365,6 +645,7 @@ class XushiService:
             follow_up.finished_at = cancelled_at
             follow_up.result = {**follow_up.result, "cancelled_reason": reason}
             self.store.save_run(follow_up)
+            self._cancel_deliveries_for_run(follow_up.id, cancelled_at, reason)
 
     def _cancel_open_runs_for_task(
         self,
@@ -380,6 +661,7 @@ class XushiService:
             run.finished_at = cancelled_at
             run.result = {**run.result, "cancelled_reason": reason}
             self.store.save_run(run)
+            self._cancel_deliveries_for_run(run.id, cancelled_at, reason)
 
     def _last_primary_run_for_task(self, task_id: str) -> Run | None:
         primary_runs = [
@@ -398,8 +680,8 @@ class XushiService:
     def _save_notification_from_result(
         self,
         result: dict[str, object],
-        run_id: str,
-        task_id: str,
+        run_id: str | None,
+        task_id: str | None,
         kind: str,
     ) -> None:
         event = NotificationEvent(
