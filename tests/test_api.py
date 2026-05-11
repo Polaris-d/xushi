@@ -128,6 +128,75 @@ def test_create_task_rejects_naive_datetime(tmp_path) -> None:
     assert "timezone-aware" in response.text
 
 
+def test_create_task_rejects_completion_anchor_without_confirmation(tmp_path) -> None:
+    settings = Settings(database_path=tmp_path / "xushi.db", api_token="test-token")
+    client = TestClient(create_app(settings))
+
+    response = client.post(
+        "/api/v1/tasks",
+        headers={"Authorization": "Bearer test-token"},
+        json={
+            "title": "喝水",
+            "schedule": {
+                "kind": "recurring",
+                "run_at": datetime(2026, 5, 9, 12, 0, tzinfo=UTC).isoformat(),
+                "rrule": "FREQ=HOURLY",
+                "timezone": "UTC",
+                "anchor": "completion",
+            },
+            "action": {"type": "reminder", "payload": {"message": "喝水"}},
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["message"] == "completion anchor requires confirmation"
+
+
+def test_update_task_rejects_completion_anchor_without_completion_anchor(tmp_path) -> None:
+    settings = Settings(database_path=tmp_path / "xushi.db", api_token="test-token")
+    client = TestClient(create_app(settings))
+    create_response = client.post(
+        "/api/v1/tasks",
+        headers={"Authorization": "Bearer test-token"},
+        json={
+            "title": "喝水",
+            "schedule": {
+                "kind": "recurring",
+                "run_at": datetime(2026, 5, 9, 12, 0, tzinfo=UTC).isoformat(),
+                "rrule": "FREQ=HOURLY",
+                "timezone": "UTC",
+                "anchor": "calendar",
+            },
+            "action": {"type": "reminder", "payload": {"message": "喝水"}},
+        },
+    )
+    task_id = create_response.json()["data"]["id"]
+    client.post(
+        f"/api/v1/tasks/{task_id}/runs",
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    response = client.patch(
+        f"/api/v1/tasks/{task_id}",
+        headers={"Authorization": "Bearer test-token"},
+        json={
+            "schedule": {
+                "kind": "recurring",
+                "run_at": datetime(2026, 5, 9, 12, 0, tzinfo=UTC).isoformat(),
+                "rrule": "FREQ=HOURLY",
+                "timezone": "UTC",
+                "anchor": "completion",
+            },
+            "follow_up_policy": {"requires_confirmation": True},
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["message"] == (
+        "switching to completion anchor requires confirming the latest primary run"
+    )
+
+
 def test_create_task_rejects_idempotency_key_conflict(tmp_path) -> None:
     settings = Settings(database_path=tmp_path / "xushi.db", api_token="test-token")
     client = TestClient(create_app(settings))

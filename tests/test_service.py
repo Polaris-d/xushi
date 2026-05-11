@@ -13,9 +13,14 @@ from xushi.models import (
     RunCallback,
     Schedule,
     TaskCreate,
+    TaskPatch,
     TaskQuietPolicy,
 )
-from xushi.service import IdempotencyConflictError, XushiService
+from xushi.service import (
+    IdempotencyConflictError,
+    InvalidTaskConfigurationError,
+    XushiService,
+)
 from xushi.timezone import get_tzinfo
 
 
@@ -907,6 +912,106 @@ def test_completion_anchor_waits_for_confirmation_before_next_run(tmp_path) -> N
     assert before_completion_interval == []
     assert len(after_completion_interval) == 1
     assert after_completion_interval[0].scheduled_for == datetime(2026, 5, 9, 13, 10, tzinfo=UTC)
+
+
+def test_completion_anchor_requires_confirmation_policy(tmp_path) -> None:
+    service = XushiService(Settings(database_path=tmp_path / "xushi.db", api_token="test-token"))
+
+    with pytest.raises(InvalidTaskConfigurationError, match="requires confirmation"):
+        service.create_task(
+            TaskCreate(
+                title="喝水",
+                schedule=Schedule(
+                    kind="recurring",
+                    run_at=datetime(2026, 5, 9, 12, 0, tzinfo=UTC),
+                    rrule="FREQ=HOURLY",
+                    timezone="UTC",
+                    anchor="completion",
+                ),
+                action={"type": "reminder", "payload": {"message": "喝水"}},
+            )
+        )
+
+
+def test_update_to_completion_anchor_rejects_terminal_run_without_anchor(tmp_path) -> None:
+    service = XushiService(Settings(database_path=tmp_path / "xushi.db", api_token="test-token"))
+    task = service.create_task(
+        TaskCreate(
+            title="喝水",
+            schedule=Schedule(
+                kind="recurring",
+                run_at=datetime(2026, 5, 9, 12, 0, tzinfo=UTC),
+                rrule="FREQ=HOURLY",
+                timezone="UTC",
+                anchor="calendar",
+            ),
+            action={"type": "reminder", "payload": {"message": "喝水"}},
+        )
+    )
+    first_run = service.tick(now=datetime(2026, 5, 9, 12, 1, tzinfo=UTC))[0]
+
+    with pytest.raises(InvalidTaskConfigurationError, match="confirming the latest"):
+        service.update_task(
+            task.id,
+            TaskPatch(
+                schedule=Schedule(
+                    kind="recurring",
+                    run_at=datetime(2026, 5, 9, 12, 0, tzinfo=UTC),
+                    rrule="FREQ=HOURLY",
+                    timezone="UTC",
+                    anchor="completion",
+                ),
+                follow_up_policy=FollowUpPolicy(requires_confirmation=True),
+            ),
+        )
+
+    stored_task = service.get_task(task.id)
+    assert first_run.status == "succeeded"
+    assert first_run.confirmed_at is None
+    assert stored_task is not None
+    assert stored_task.schedule.anchor == "calendar"
+
+
+def test_update_to_completion_anchor_allows_active_unconfirmed_run(tmp_path) -> None:
+    service = XushiService(Settings(database_path=tmp_path / "xushi.db", api_token="test-token"))
+    task = service.create_task(
+        TaskCreate(
+            title="喝水",
+            schedule=Schedule(
+                kind="recurring",
+                run_at=datetime(2026, 5, 9, 12, 0, tzinfo=UTC),
+                rrule="FREQ=HOURLY",
+                timezone="UTC",
+                anchor="calendar",
+            ),
+            action={"type": "reminder", "payload": {"message": "喝水"}},
+            follow_up_policy=FollowUpPolicy(requires_confirmation=True),
+        )
+    )
+    first_run = service.tick(now=datetime(2026, 5, 9, 12, 1, tzinfo=UTC))[0]
+
+    updated = service.update_task(
+        task.id,
+        TaskPatch(
+            schedule=Schedule(
+                kind="recurring",
+                run_at=datetime(2026, 5, 9, 12, 0, tzinfo=UTC),
+                rrule="FREQ=HOURLY",
+                timezone="UTC",
+                anchor="completion",
+            ),
+        ),
+    )
+    pending = service.tick(now=datetime(2026, 5, 9, 13, 1, tzinfo=UTC))
+    service.confirm_run(first_run.id, now=datetime(2026, 5, 9, 12, 10, tzinfo=UTC))
+    next_runs = service.tick(now=datetime(2026, 5, 9, 13, 11, tzinfo=UTC))
+
+    assert updated is not None
+    assert updated.schedule.anchor == "completion"
+    assert first_run.status == "pending_confirmation"
+    assert pending == []
+    assert len(next_runs) == 1
+    assert next_runs[0].scheduled_for == datetime(2026, 5, 9, 13, 10, tzinfo=UTC)
 
 
 def test_tick_records_runtime_metrics(tmp_path) -> None:
