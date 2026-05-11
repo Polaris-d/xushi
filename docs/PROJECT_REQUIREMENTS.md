@@ -68,6 +68,7 @@
 - 提供 wheel 和跨平台预编译二进制构建配置，降低非 Python 用户安装门槛。
 - 提供 tag 触发的 GitHub Release 工作流，发布 wheel 与跨平台二进制产物。
 - GitHub Release 资产必须使用唯一、可读的平台命名，并包含自动 release notes 和 SHA256 校验和。
+- 预编译二进制必须使用稳定 Python 版本构建，并在发布工作流中执行启动级 smoke test，避免打包运行时与目标系统内核策略不兼容。
 - `xushi-skills` 必须随应用程序打包，安装和升级以当前 `xushi` 程序版本为准；GitHub Release 不再发布独立的 `xushi-skills.zip`，避免 skills 与程序版本错配。
 - OpenClaw 插件必须随应用程序打包，安装和升级以当前 `xushi` 程序版本为准；GitHub Release 不再发布独立的插件 zip。插件源码目录仍保留，用于开发和 ClawHub 发布。
 - 提供 `.gitattributes` 控制跨平台换行，避免 shell 脚本和 CI 配置在 Windows 开发环境中被破坏。
@@ -156,3 +157,4 @@
 | 2026-05-11 | 调整 | 增加 SQLite 结构化索引与 schema 迁移要求，并明确同一幂等键不同请求体返回冲突。 |
 | 2026-05-11 | 新增 | 增加运行期指标、有限自动重试、SQLite PRAGMA 配置、列表默认上限和元数据一致性 CI 要求。 |
 | 2026-05-11 | 明确 | `completion` anchor 必须依赖确认时间，禁止从无确认终态运行记录迁移出隐式锚点。 |
+| 2026-05-11 | 明确 | 发布二进制必须固定稳定 Python 构建版本并执行启动 smoke test。 |

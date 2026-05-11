@@ -157,6 +157,13 @@ def test_release_workflow_publishes_tagged_artifacts() -> None:
     assert "merge-multiple: true" in release_workflow
     assert "SHA256SUMS.txt" in release_workflow
     assert "generate_release_notes: true" in release_workflow
+    assert 'UV_PYTHON: "3.12"' in release_workflow
+    assert 'UV_PYTHON: "3.12"' in build_workflow
+    assert "ubuntu-22.04" in release_workflow
+    assert "ubuntu-22.04" in build_workflow
+    assert "Smoke test binaries" in release_workflow
+    assert "Smoke test binaries" in build_workflow
+    assert "ubuntu:26.04" in release_workflow
     assert "--skills" not in build_workflow
     assert "--plugin" not in build_workflow
     assert "xushi-skills.zip" not in release_workflow
