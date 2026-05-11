@@ -27,7 +27,7 @@ from xushi.config import (
 )
 from xushi.models import Executor, RunStatus, TaskCreate
 from xushi.plugins import bundled_plugin_status, install_bundled_plugin
-from xushi.service import XushiService
+from xushi.service import InvalidTaskConfigurationError, XushiService
 from xushi.skills import bundled_skills_status, install_bundled_skills
 from xushi.upgrade import UpgradeError, UpgradeManager, default_bin_dir
 
@@ -310,7 +310,10 @@ def doctor(
 def create(task_file: Path) -> None:
     """从 JSON 文件创建任务。"""
     payload = json.loads(task_file.read_text(encoding="utf-8"))
-    task = _service().create_task(TaskCreate.model_validate(payload))
+    try:
+        task = _service().create_task(TaskCreate.model_validate(payload))
+    except InvalidTaskConfigurationError as exc:
+        raise typer.BadParameter(str(exc)) from exc
     typer.echo(task.model_dump_json(indent=2))
 
 

@@ -41,6 +41,10 @@ class IdempotencyConflictError(ValueError):
     """同一幂等键被用于不同请求。"""
 
 
+class InvalidTaskConfigurationError(ValueError):
+    """任务配置无法形成有效调度语义。"""
+
+
 class XushiService:
     """组合调度、执行器和持久化的应用服务。"""
 
@@ -78,6 +82,7 @@ class XushiService:
                     raise IdempotencyConflictError("idempotency key conflict")
                 return existing
         task = request.to_task()
+        self._validate_task_contract(task)
         return self.store.save_task(task, idempotency_hash=idempotency_hash)
 
     def list_tasks(self, *, limit: int | None = None) -> list[Task]:
@@ -98,6 +103,8 @@ class XushiService:
         data.update(patch_data)
         data["updated_at"] = datetime.now(tz=UTC)
         updated = Task.model_validate(data)
+        self._validate_task_contract(updated)
+        self._validate_task_schedule_transition(task, updated)
         return self.store.save_task(updated)
 
     def delete_task(self, task_id: str) -> bool:
@@ -798,6 +805,35 @@ class XushiService:
 
     def _last_primary_run_for_task(self, task_id: str) -> Run | None:
         return self.store.last_primary_run_for_task(task_id)
+
+    def _validate_task_contract(self, task: Task) -> None:
+        """校验跨字段调度约束。"""
+        schedule = task.schedule
+        if (
+            schedule.kind == "recurring"
+            and schedule.anchor == "completion"
+            and not task.follow_up_policy.requires_confirmation
+        ):
+            raise InvalidTaskConfigurationError("completion anchor requires confirmation")
+
+    def _validate_task_schedule_transition(self, previous: Task, updated: Task) -> None:
+        """阻止更新后进入缺失完成锚点的调度状态。"""
+        if not self._uses_completion_anchor(updated) or self._uses_completion_anchor(previous):
+            return
+
+        last_run = self._last_primary_run_for_task(previous.id)
+        if last_run is None or last_run.confirmed_at is not None:
+            return
+        if str(last_run.status) in ACTIVE_RUN_STATUSES:
+            return
+
+        raise InvalidTaskConfigurationError(
+            "switching to completion anchor requires confirming the latest primary run"
+        )
+
+    def _uses_completion_anchor(self, task: Task) -> bool:
+        schedule = task.schedule
+        return schedule.kind == "recurring" and schedule.anchor == "completion"
 
     def _idempotency_hash(self, request: TaskCreate) -> str:
         """生成创建请求摘要，用于检测同 key 不同请求。"""

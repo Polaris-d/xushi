@@ -16,7 +16,11 @@ from xushi import __version__
 from xushi.config import Settings
 from xushi.models import RunCallback, RunStatus, TaskCreate, TaskPatch
 from xushi.runtime import run_scheduler_loop
-from xushi.service import IdempotencyConflictError, XushiService
+from xushi.service import (
+    IdempotencyConflictError,
+    InvalidTaskConfigurationError,
+    XushiService,
+)
 
 
 def api_response(
@@ -96,6 +100,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             task = service.create_task(request)
         except IdempotencyConflictError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except InvalidTaskConfigurationError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         response.status_code = status.HTTP_201_CREATED
         return api_response(task.model_dump(mode="json"), "created", 201)
 
@@ -116,7 +122,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.patch("/api/v1/tasks/{task_id}", dependencies=[Depends(require_token)])
     def update_task(task_id: str, patch: TaskPatch) -> dict[str, Any]:
-        task = service.update_task(task_id, patch)
+        try:
+            task = service.update_task(task_id, patch)
+        except InvalidTaskConfigurationError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         if task is None:
             raise HTTPException(status_code=404, detail="task not found")
         return api_response(task.model_dump(mode="json"))
