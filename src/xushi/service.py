@@ -24,7 +24,7 @@ from xushi.models import (
 )
 from xushi.notifications import NotificationDispatcher, NotificationEvent
 from xushi.scheduler import Scheduler
-from xushi.storage import SQLiteStore
+from xushi.storage import SQLiteStore, dump_json
 
 ACTIVE_RUN_STATUSES = {
     RunStatus.PENDING_DELIVERY.value,
@@ -32,6 +32,10 @@ ACTIVE_RUN_STATUSES = {
     RunStatus.FOLLOWING_UP.value,
 }
 DELIVERABLE_STATUSES = {DeliveryStatus.PENDING.value, DeliveryStatus.DELAYED.value}
+
+
+class IdempotencyConflictError(ValueError):
+    """同一幂等键被用于不同请求。"""
 
 
 class XushiService:
@@ -50,12 +54,18 @@ class XushiService:
 
     def create_task(self, request: TaskCreate) -> Task:
         """创建任务。"""
+        idempotency_hash = (
+            self._idempotency_hash(request) if request.idempotency_key else None
+        )
         if request.idempotency_key:
-            existing = self._find_task_by_idempotency_key(request.idempotency_key)
+            existing = self.store.get_task_by_idempotency_key(request.idempotency_key)
             if existing is not None:
+                existing_hash = self.store.get_task_idempotency_hash(request.idempotency_key)
+                if existing_hash is not None and existing_hash != idempotency_hash:
+                    raise IdempotencyConflictError("idempotency key conflict")
                 return existing
         task = request.to_task()
-        return self.store.save_task(task)
+        return self.store.save_task(task, idempotency_hash=idempotency_hash)
 
     def list_tasks(self) -> list[Task]:
         """列出任务。"""
@@ -147,17 +157,9 @@ class XushiService:
 
     def confirm_latest_run(self, task_id: str, now: datetime | None = None) -> Run | None:
         """确认某任务最近一次待确认主运行记录。"""
-        pending_runs = [
-            run
-            for run in self.store.list_runs()
-            if run.task_id == task_id
-            and run.origin_run_id is None
-            and run.confirmed_at is None
-            and run.status == RunStatus.PENDING_CONFIRMATION
-        ]
-        if not pending_runs:
+        latest = self.store.latest_pending_primary_run_for_task(task_id)
+        if latest is None:
             return None
-        latest = max(pending_runs, key=lambda item: item.scheduled_for)
         return self.confirm_run(latest.id, now)
 
     def callback_run(self, run_id: str, callback: RunCallback) -> Run | None:
@@ -204,9 +206,7 @@ class XushiService:
         current = now or datetime.now(tz=UTC)
         self.process_deliveries(current)
         created: list[Run] = []
-        for task in self.list_tasks():
-            if task.status != TaskStatus.ACTIVE:
-                continue
+        for task in self.store.list_active_tasks():
             last_run = self._last_primary_run_for_task(task.id)
             last_scheduled_for = last_run.scheduled_for if last_run else None
             last_completed_at = last_run.confirmed_at if last_run else None
@@ -223,11 +223,10 @@ class XushiService:
     def process_deliveries(self, now: datetime | None = None) -> list[Delivery]:
         """投递到期的提醒或免打扰摘要。"""
         current = now or datetime.now(tz=UTC)
-        due_deliveries = [
-            delivery
-            for delivery in self.store.list_deliveries()
-            if delivery.status in DELIVERABLE_STATUSES and delivery.deliver_at <= current
-        ]
+        due_deliveries = self.store.list_due_deliveries(
+            current,
+            statuses=DELIVERABLE_STATUSES,
+        )
         deliverable: list[Delivery] = []
         grouped_delivery_ids: set[str] = set()
         processed: list[Delivery] = []
@@ -335,14 +334,12 @@ class XushiService:
         limit: int | None = None,
     ) -> list[Run]:
         """列出运行历史。"""
-        all_runs = self.store.list_runs()
-        runs = all_runs
-        if task_id is not None:
-            runs = [run for run in runs if run.task_id == task_id]
-        if status is not None:
-            run_status = RunStatus(status)
-            runs = [run for run in runs if run.status == run_status]
         if active_only:
+            all_runs = self.store.list_runs(task_id=task_id) if task_id else self.store.list_runs()
+            runs = all_runs
+            if status is not None:
+                run_status = RunStatus(status)
+                runs = [run for run in runs if run.status == run_status]
             runs_by_id = {run.id: run for run in all_runs}
             tasks_by_id = {task.id: task for task in self.list_tasks()}
             runs = [
@@ -350,6 +347,9 @@ class XushiService:
                 for run in runs
                 if self._is_active_run(run, runs_by_id=runs_by_id, tasks_by_id=tasks_by_id)
             ]
+        else:
+            runs = self.store.list_runs(task_id=task_id, status=status, limit=limit)
+            return runs
         if limit is not None:
             runs = runs[:limit]
         return runs
@@ -407,7 +407,7 @@ class XushiService:
         """为仍需投递的失败 delivery 创建一次新的投递尝试。"""
         current = now or datetime.now(tz=UTC)
         created: list[Delivery] = []
-        for delivery in self.store.list_deliveries():
+        for delivery in self.store.list_deliveries(statuses={DeliveryStatus.FAILED.value}):
             if limit is not None and len(created) >= limit:
                 break
             if not self._failed_delivery_can_retry(delivery):
@@ -449,9 +449,10 @@ class XushiService:
         reason: str,
     ) -> None:
         """取消某运行记录下尚未执行的投递计划。"""
-        for delivery in self.store.list_deliveries():
-            if delivery.run_id != run_id or delivery.status not in DELIVERABLE_STATUSES:
-                continue
+        for delivery in self.store.list_deliveries_for_run(
+            run_id,
+            statuses=DELIVERABLE_STATUSES,
+        ):
             self._cancel_delivery(delivery, cancelled_at, reason)
 
     def _action_for_run(self, task: Task, run: Run, *, kind: str) -> Action:
@@ -738,10 +739,7 @@ class XushiService:
         exclude_run_id: str | None = None,
     ) -> None:
         """取消同一主运行记录下尚未完成的跟进记录。"""
-        for follow_up in self._group_follow_ups_by_origin(self.store.list_runs()).get(
-            origin_run_id,
-            [],
-        ):
+        for follow_up in self.store.list_follow_ups_for_origin(origin_run_id):
             if follow_up.id == exclude_run_id or follow_up.status not in ACTIVE_RUN_STATUSES:
                 continue
             follow_up.status = RunStatus.CANCELLED
@@ -757,9 +755,7 @@ class XushiService:
         reason: str,
     ) -> None:
         """取消任务下仍在等待确认或跟进的运行记录。"""
-        for run in self.store.list_runs():
-            if run.task_id != task_id or run.status not in ACTIVE_RUN_STATUSES:
-                continue
+        for run in self.store.list_open_runs_for_task(task_id, ACTIVE_RUN_STATUSES):
             run.status = RunStatus.CANCELLED
             run.finished_at = cancelled_at
             run.result = {**run.result, "cancelled_reason": reason}
@@ -767,18 +763,11 @@ class XushiService:
             self._cancel_deliveries_for_run(run.id, cancelled_at, reason)
 
     def _last_primary_run_for_task(self, task_id: str) -> Run | None:
-        primary_runs = [
-            run for run in self.list_runs() if run.task_id == task_id and run.origin_run_id is None
-        ]
-        if not primary_runs:
-            return None
-        return max(primary_runs, key=lambda run: run.scheduled_for)
+        return self.store.last_primary_run_for_task(task_id)
 
-    def _find_task_by_idempotency_key(self, idempotency_key: str) -> Task | None:
-        for task in self.list_tasks():
-            if task.idempotency_key == idempotency_key:
-                return task
-        return None
+    def _idempotency_hash(self, request: TaskCreate) -> str:
+        """生成创建请求摘要，用于检测同 key 不同请求。"""
+        return dump_json(request.model_dump(mode="json"))
 
     def _save_notification_from_result(
         self,

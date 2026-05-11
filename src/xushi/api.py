@@ -16,7 +16,7 @@ from xushi import __version__
 from xushi.config import Settings
 from xushi.models import RunCallback, RunStatus, TaskCreate, TaskPatch
 from xushi.runtime import run_scheduler_loop
-from xushi.service import XushiService
+from xushi.service import IdempotencyConflictError, XushiService
 
 
 def api_response(
@@ -92,8 +92,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/v1/tasks", status_code=201, dependencies=[Depends(require_token)])
     def create_task(request: TaskCreate, response: Response) -> dict[str, Any]:
+        try:
+            task = service.create_task(request)
+        except IdempotencyConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         response.status_code = status.HTTP_201_CREATED
-        return api_response(service.create_task(request).model_dump(mode="json"), "created", 201)
+        return api_response(task.model_dump(mode="json"), "created", 201)
 
     @app.get("/api/v1/tasks", dependencies=[Depends(require_token)])
     def list_tasks() -> dict[str, Any]:

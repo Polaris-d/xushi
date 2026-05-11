@@ -128,6 +128,46 @@ def test_create_task_rejects_naive_datetime(tmp_path) -> None:
     assert "timezone-aware" in response.text
 
 
+def test_create_task_rejects_idempotency_key_conflict(tmp_path) -> None:
+    settings = Settings(database_path=tmp_path / "xushi.db", api_token="test-token")
+    client = TestClient(create_app(settings))
+    base_payload = {
+        "title": "生成日报",
+        "schedule": {
+            "kind": "one_shot",
+            "run_at": datetime(2026, 5, 9, 12, 0, tzinfo=UTC).isoformat(),
+            "timezone": "UTC",
+        },
+        "action": {"type": "reminder", "payload": {"message": "生成日报"}},
+        "idempotency_key": "agent-retry-conflict",
+    }
+    first_response = client.post(
+        "/api/v1/tasks",
+        headers={"Authorization": "Bearer test-token"},
+        json=base_payload,
+    )
+    conflict_payload = {
+        **base_payload,
+        "title": "生成晚报",
+        "schedule": {
+            "kind": "one_shot",
+            "run_at": datetime(2026, 5, 9, 18, 0, tzinfo=UTC).isoformat(),
+            "timezone": "UTC",
+        },
+        "action": {"type": "reminder", "payload": {"message": "生成晚报"}},
+    }
+
+    conflict_response = client.post(
+        "/api/v1/tasks",
+        headers={"Authorization": "Bearer test-token"},
+        json=conflict_payload,
+    )
+
+    assert first_response.status_code == 201
+    assert conflict_response.status_code == 409
+    assert conflict_response.json()["message"] == "idempotency key conflict"
+
+
 def test_confirm_run_endpoint(tmp_path) -> None:
     settings = Settings(database_path=tmp_path / "xushi.db", api_token="test-token")
     client = TestClient(create_app(settings))

@@ -2,6 +2,8 @@
 
 from datetime import UTC, datetime
 
+import pytest
+
 from xushi.config import Settings
 from xushi.models import (
     Executor,
@@ -13,7 +15,7 @@ from xushi.models import (
     TaskCreate,
     TaskQuietPolicy,
 )
-from xushi.service import XushiService
+from xushi.service import IdempotencyConflictError, XushiService
 from xushi.timezone import get_tzinfo
 
 
@@ -220,6 +222,38 @@ def test_create_task_reuses_idempotency_key(tmp_path) -> None:
     assert len(service.list_tasks()) == 1
 
 
+def test_create_task_rejects_idempotency_key_reuse_with_different_payload(tmp_path) -> None:
+    service = XushiService(Settings(database_path=tmp_path / "xushi.db", api_token="test-token"))
+    first_request = TaskCreate(
+        title="生成日报",
+        schedule=Schedule(
+            kind="one_shot",
+            run_at=datetime(2026, 5, 9, 12, 0, tzinfo=UTC),
+            timezone="UTC",
+        ),
+        action={"type": "reminder", "payload": {"message": "生成日报"}},
+        idempotency_key="agent-retry-conflict",
+    )
+    conflicting_request = TaskCreate(
+        title="生成晚报",
+        schedule=Schedule(
+            kind="one_shot",
+            run_at=datetime(2026, 5, 9, 18, 0, tzinfo=UTC),
+            timezone="UTC",
+        ),
+        action={"type": "reminder", "payload": {"message": "生成晚报"}},
+        idempotency_key="agent-retry-conflict",
+    )
+
+    first = service.create_task(first_request)
+
+    with pytest.raises(IdempotencyConflictError, match="idempotency key conflict"):
+        service.create_task(conflicting_request)
+
+    assert first.title == "生成日报"
+    assert len(service.list_tasks()) == 1
+
+
 def test_confirm_run_marks_pending_run_succeeded(tmp_path) -> None:
     service = XushiService(Settings(database_path=tmp_path / "xushi.db", api_token="test-token"))
     task = service.create_task(
@@ -341,6 +375,36 @@ def test_confirm_latest_run_confirms_most_recent_primary_run(tmp_path) -> None:
     assert confirmed.status == "succeeded"
     assert stored_older is not None
     assert stored_older.status == "pending_confirmation"
+
+
+def test_confirm_latest_run_uses_targeted_queries(tmp_path, monkeypatch) -> None:
+    service = XushiService(Settings(database_path=tmp_path / "xushi.db", api_token="test-token"))
+    task = service.create_task(
+        TaskCreate(
+            title="喝水",
+            schedule=Schedule(
+                kind="one_shot",
+                run_at=datetime(2026, 5, 9, 12, 0, tzinfo=UTC),
+                timezone="UTC",
+            ),
+            action={"type": "reminder", "payload": {"message": "喝水"}},
+            follow_up_policy=FollowUpPolicy(requires_confirmation=True),
+        )
+    )
+    run = service.trigger_task(task.id, now=datetime(2026, 5, 9, 12, 0, tzinfo=UTC))
+
+    def fail_list_runs():
+        raise AssertionError("confirm_latest_run should not scan every run")
+
+    monkeypatch.setattr(service.store, "list_runs", fail_list_runs)
+
+    confirmed = service.confirm_latest_run(
+        task.id,
+        now=datetime(2026, 5, 9, 12, 5, tzinfo=UTC),
+    )
+
+    assert confirmed is not None
+    assert confirmed.id == run.id
 
 
 def test_delete_task_cancels_open_runs(tmp_path) -> None:
@@ -528,6 +592,46 @@ def test_global_quiet_policy_delays_delivery_without_losing_run(tmp_path) -> Non
     assert delivered_run is not None
     assert delivered_run.status == "pending_confirmation"
     assert service.list_deliveries()[0].status == "delivered"
+
+
+def test_process_deliveries_uses_due_delivery_query(tmp_path, monkeypatch) -> None:
+    shanghai = get_tzinfo("Asia/Shanghai")
+    service = XushiService(
+        Settings(
+            database_path=tmp_path / "xushi.db",
+            api_token="test-token",
+            quiet_policy=QuietPolicy(
+                enabled=True,
+                timezone="Asia/Shanghai",
+                windows=[QuietWindow(start="22:30", end="08:00")],
+            ),
+        )
+    )
+    task = service.create_task(
+        TaskCreate(
+            title="喝水",
+            schedule=Schedule(
+                kind="one_shot",
+                run_at=datetime(2026, 5, 9, 23, 0, tzinfo=shanghai),
+                timezone="Asia/Shanghai",
+            ),
+            action={"type": "reminder", "payload": {"message": "喝水"}},
+            follow_up_policy=FollowUpPolicy(requires_confirmation=True),
+        )
+    )
+    run = service.trigger_task(task.id, now=datetime(2026, 5, 9, 23, 0, tzinfo=shanghai))
+
+    def fail_list_deliveries():
+        raise AssertionError("process_deliveries should not scan every delivery")
+
+    monkeypatch.setattr(service.store, "list_deliveries", fail_list_deliveries)
+
+    processed = service.process_deliveries(now=datetime(2026, 5, 10, 8, 0, tzinfo=shanghai))
+
+    assert [delivery.status for delivery in processed] == ["delivered"]
+    delivered_run = service.get_run(run.id)
+    assert delivered_run is not None
+    assert delivered_run.status == "pending_confirmation"
 
 
 def test_quiet_policy_aggregates_delayed_deliveries(tmp_path) -> None:
