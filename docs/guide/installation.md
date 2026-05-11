@@ -166,7 +166,7 @@ Invoke-RestMethod http://127.0.0.1:18766/api/v1/health
 
 ### Step 5: Configure agent integration
 
-Do this slowly and verify each boundary. Most failed installations are not caused by the xushi binary; they are caused by token scope, daemon restart, wrong executor ids, or hook URLs that are reachable from the user shell but not from the daemon process.
+Do this slowly and verify each boundary. Most failed installations are not caused by the xushi binary; they are caused by token scope, missing config reload or daemon restart, wrong executor ids, or hook URLs that are reachable from the user shell but not from the daemon process.
 
 #### 5.1 Capture the local xushi connection
 
@@ -307,14 +307,24 @@ Check these details before testing:
 - `conversation_id`, `channel`, and `deliver` must match how Hermes routes messages to the user.
 - If Hermes accepts the HTTP request but the user sees nothing, inspect Hermes routing/channel settings before changing xushi task schema.
 
-#### 5.6 Restart and verify what xushi actually loaded
+#### 5.6 Reload or restart and verify what xushi actually loaded
 
-Restart `xushi-daemon` after editing `~/.xushi/config.json` or changing hook-token environment variables. Then run:
+After editing `~/.xushi/config.json` executors or global `quiet_policy`, explicitly reload the running daemon:
+
+```bash
+xushi reload-config
+```
+
+If the OpenClaw plugin is available, call `xushi_reload_config` instead. If using raw HTTP, POST `/api/v1/config/reload` with the current running API token.
+
+Restart `xushi-daemon` only after changing daemon environment variables, API token, database path, host, port, or scheduler interval. Then run:
 
 ```bash
 xushi doctor
 xushi executors
 ```
+
+`xushi executors` validates the local config file. To verify the running daemon's in-memory executor list, use the OpenClaw tool `xushi_list_executors` or `GET /api/v1/executors`.
 
 Expected result:
 
@@ -323,7 +333,7 @@ Expected result:
 - The executor kind and mode match the intended target.
 - `xushi doctor` does not report missing `token_env`, missing hook-token environment variables, or a missing OpenClaw `agent_id` for the route you intend to use.
 
-If the output still shows old values, the daemon probably read a different config file or was not restarted. Re-check `xushi doctor` for `config_path` and restart the daemon from the same environment that contains the hook token variables.
+If the output still shows old values, the daemon probably read a different config file or was not reloaded/restarted. Re-check `xushi doctor` for `config_path`, then reload config or restart the daemon from the same environment that contains the hook token variables.
 
 ### Step 6: Run an interactive delivery check
 
@@ -397,7 +407,7 @@ Read the result by layer:
 
 - `xushi doctor` fails: local config, database path, token, or port is wrong.
 - `xushi_health` or HTTP health fails from the agent: the agent cannot reach the daemon.
-- Task is created but `xushi executors` does not show the expected executor: config file path is wrong or daemon was not restarted.
+- Task is created but the daemon executor list does not show the expected executor: config file path is wrong or the daemon was not reloaded/restarted.
 - Delivery is `delayed`: quiet policy is working; check `deliver_at` in `xushi deliveries`.
 - Delivery is `failed`: inspect the delivery error and executor hook token/URL.
 - Delivery error contains `missing token or token_env`: set the hook token in the `xushi-daemon` environment, not only in the agent/plugin environment.
@@ -406,9 +416,10 @@ Read the result by layer:
 - Local notification appears instead of OpenClaw/Hermes: `action.executor_id` was missing or did not exactly match an enabled executor id.
 - Repeated smoke tests reuse an old task: add a unique title or `idempotency_key` for each setup attempt.
 
-Fix the failing layer, restart `xushi-daemon` if config or environment changed, then retry the failed delivery or send one new smoke-test reminder:
+Fix the failing layer, reload config for executor or global quiet-policy changes, restart `xushi-daemon` for environment or startup-level changes, then retry the failed delivery or send one new smoke-test reminder:
 
 ```bash
+xushi reload-config
 xushi retry-deliveries
 ```
 

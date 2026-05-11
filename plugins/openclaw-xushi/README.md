@@ -12,6 +12,7 @@
 - `xushi_list_runs`：列出运行记录，支持按任务、状态、活跃状态和条数过滤。
 - `xushi_list_deliveries`：列出投递计划，查看提醒是否被免打扰延迟、聚合、跳过或投递。
 - `xushi_retry_deliveries`：重试仍需要投递的失败记录。
+- `xushi_reload_config`：显式重新加载 daemon 的 executor 和全局免打扰配置。
 - `xushi_confirm_run`：确认运行记录已完成，停止后续跟进。
 - `xushi_confirm_latest_run`：确认某任务最近一次待确认主运行记录。
 - `xushi_callback_run`：提交长任务最终结果。
@@ -55,7 +56,7 @@ OpenClaw config 可覆盖：
 
 ## 提醒投递到 Agent
 
-序时 daemon 不能自动调用 OpenClaw 插件本身。要让提醒进入 OpenClaw/飞书等 agent 渠道，请把 OpenClaw hooks agent executor 写入 `~/.xushi/config.json` 的 `executors` 数组，然后重启 daemon：
+序时 daemon 不能自动调用 OpenClaw 插件本身。要让提醒进入 OpenClaw/飞书等 agent 渠道，请把 OpenClaw hooks agent executor 写入 `~/.xushi/config.json` 的 `executors` 数组，然后调用 `xushi_reload_config` 或 `xushi reload-config` 让运行中的 daemon 重新加载。只有修改 daemon 进程环境变量、API token、数据库路径、监听端口或调度间隔时才需要重启 daemon：
 
 ```json
 {
@@ -81,7 +82,7 @@ OpenClaw config 可覆盖：
 
 1. OpenClaw Gateway 已启用 hooks，并且运行 `xushi-daemon` 的环境里有 `OPENCLAW_HOOKS_TOKEN`。
 2. 创建提醒任务时在 `task.action.executor_id` 中引用该执行器，例如 `"executor_id": "openclaw"`。
-3. 如果前几次投递因为 token、URL、TLS 或 `agent_id` 配置失败，修复配置并重启 daemon 后调用 `xushi_retry_deliveries` 或 `xushi retry-deliveries`。
+3. 如果前几次投递因为 token、URL、TLS 或 `agent_id` 配置失败，修复配置后先 reload config；如果改的是 daemon 环境变量则重启 daemon，然后调用 `xushi_retry_deliveries` 或 `xushi retry-deliveries`。
 
 没有 `executor_id` 的 `reminder` 只会走本地系统通知，适合桌面环境，不适合无桌面的服务器。
 

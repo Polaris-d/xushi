@@ -222,6 +222,32 @@ def test_completion_anchor_reschedules_from_confirmation_time() -> None:
     assert due_after_interval == [datetime(2026, 5, 9, 13, 10, tzinfo=UTC)]
 
 
+def test_completion_anchor_interprets_rrule_in_schedule_timezone_after_patch() -> None:
+    scheduler = Scheduler()
+    shanghai = get_tzinfo("Asia/Shanghai")
+    task = TaskCreate(
+        title="久坐提醒",
+        schedule=Schedule(
+            kind="recurring",
+            run_at=datetime(2026, 5, 11, 2, 24, 39, tzinfo=UTC),
+            rrule="FREQ=DAILY;BYHOUR=9,10,11,12,13,14,15,16,17,18,19,20,21,22;BYMINUTE=0",
+            timezone="Asia/Shanghai",
+            anchor="completion",
+        ),
+        action={"type": "reminder", "payload": {"message": "起来活动一下"}},
+        follow_up_policy=FollowUpPolicy(requires_confirmation=True),
+    ).to_task(task_id="task_sedentary")
+
+    due = scheduler.due_occurrences(
+        task,
+        now=datetime(2026, 5, 11, 3, 1, tzinfo=UTC),
+        last_scheduled_for=datetime(2026, 5, 11, 2, 0, tzinfo=UTC),
+        last_completed_at=datetime(2026, 5, 11, 2, 32, 55, tzinfo=UTC),
+    )
+
+    assert due == [datetime(2026, 5, 11, 11, 0, tzinfo=shanghai)]
+
+
 def test_workday_policy_rolls_one_shot_task_to_next_china_workday() -> None:
     scheduler = Scheduler()
     shanghai = get_tzinfo("Asia/Shanghai")

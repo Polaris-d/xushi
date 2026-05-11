@@ -124,6 +124,8 @@ def test_openclaw_plugin_does_not_mutate_executor_configuration() -> None:
     )
 
     assert "xushi_list_executors" in manifest
+    assert "xushi_reload_config" in manifest
+    assert "xushi_reload_config" in source
     assert "xushi_list_runs" in manifest
     assert "xushi_confirm_latest_run" in manifest
     assert "xushi_save_executor" not in manifest

@@ -2,6 +2,8 @@
 
 Use this guide to map real user requests to xushi schedule kinds. The important part is not the words the user uses, but the time semantics behind the request.
 
+Before creating any task JSON, ensure every concrete datetime has an offset and the task has an IANA `schedule.timezone`. Interpret RRULE wall-clock rules in that timezone, not in the daemon's machine timezone or the offset of a single timestamp.
+
 ## Quick Decision Table
 
 | User intent | Schedule kind | Typical anchor | Confirmation |

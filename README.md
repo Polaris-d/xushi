@@ -101,7 +101,7 @@ irm https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/in
 | 能力 | 状态 | 说明 |
 | --- | --- | --- |
 | Python daemon | 可用 | FastAPI + SQLite，本地调度与 API |
-| CLI | 可用 | `init`、`doctor`、`create`、`list`、`trigger`、`runs`、`confirm-latest`、`tick`、`executors`、`notifications`、`deliveries`、`retry-deliveries`、`plugins`、`skills`、`upgrade` |
+| CLI | 可用 | `init`、`doctor`、`create`、`list`、`trigger`、`runs`、`confirm-latest`、`tick`、`executors`、`reload-config`、`notifications`、`deliveries`、`retry-deliveries`、`plugins`、`skills`、`upgrade` |
 | Web 管理台 | 可用 | 访问 daemon 根路径查看任务、运行记录和通知 |
 | OpenClaw 插件 | 可用 | `plugins/openclaw-xushi`，提供创建、查询、触发、运行记录过滤、失败投递重试、最近确认和 callback 工具 |
 | xushi-skills | 可用 | `skills/xushi-skills`，帮助 agent 判断任务类型、生成 schema、适当追问并记录本地优化反馈草稿 |
@@ -221,7 +221,7 @@ uv run xushi-daemon
 
 ## 配置 Agent Executor
 
-Executor 不存入 SQLite，也不能通过 API 写入；请在 `~/.xushi/config.json` 的 `executors` 数组中配置，然后重启 `xushi-daemon` 生效。
+Executor 不存入 SQLite，也不能通过 API 写入；请在 `~/.xushi/config.json` 的 `executors` 数组中配置。修改 `executors` 或全局 `quiet_policy` 后，调用 `xushi reload-config`、OpenClaw 工具 `xushi_reload_config`，或 `POST /api/v1/config/reload` 即可让运行中的 daemon 重新加载。修改 API token、数据库路径、监听地址、端口、调度间隔或 daemon 进程环境变量时仍需重启 `xushi-daemon`。
 
 ### OpenClaw
 
@@ -292,18 +292,20 @@ Hermes executor 支持可配置 HTTP agent webhook。默认请求体会把序时
 }
 ```
 
-查看 daemon 当前读到的 executor 配置：
+重新加载配置并查看当前 executor 配置：
 
 ```powershell
+xushi reload-config
 xushi executors
 xushi doctor
 ```
 
 如果 `reminder` 没有 `executor_id`，序时只会尝试本地桌面通知；在无桌面的 Linux 服务器上通常只能留下 fallback 记录。
 
-修复 executor token、URL、TLS 或 agent 路由配置并重启 daemon 后，可以重试仍需要投递的失败记录：
+修复 executor token、URL、TLS 或 agent 路由配置后，先 reload config；如果改的是 daemon 环境变量或启动级配置则重启 daemon。然后可以重试仍需要投递的失败记录：
 
 ```powershell
+xushi reload-config
 xushi retry-deliveries
 ```
 

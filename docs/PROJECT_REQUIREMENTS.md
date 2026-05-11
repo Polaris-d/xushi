@@ -20,6 +20,8 @@
 - 支持 `idempotency_key`，保障 agent 重试创建任务时不会重复生成任务。
 - API 成功和错误响应均使用统一 JSON 结构，方便 agent 稳定解析。
 - 支持 ISO 8601 时间、RRULE、timezone。
+- API 中所有具体时间点必须携带时区偏移，例如 `Z` 或 `+08:00`；不带时区的时间一律拒绝，服务端不得猜测默认时区。
+- 任务必须单独标注 IANA 时区，例如 `Asia/Shanghai`；RRULE、工作日策略、免打扰窗口和摘要投递等本地日历语义都必须按该时区或用户配置的时区解释。
 - 支持中国大陆工作日、法定节假日和调休判断；节假日与调休数据必须标注关联节日名称；工作日策略下可将触发时间顺延到下一个中国大陆工作日。
 - 支持基于完成确认时间重新计算下一次提醒，适配久坐提醒等 completion anchor 场景。
 - 任务到期事实和提醒投递行为必须分层：`Run` 记录到期事实，`Delivery` 记录实际投递计划、延迟、聚合和结果。
@@ -32,6 +34,8 @@
 - agent/聊天渠道优先通知：提醒任务配置 `executor_id` 时必须通过对应 executor 投递；未配置 executor 的 reminder 仅使用本地系统通知和 Web 管理台记录。
 - 内置 OpenClaw、Hermes、webhook executor 概念。
 - executor 配置必须存放在本地 `config.json` 的 `executors` 数组中，数据库不保存 executor 配置。
+- 修改 `config.json` 中的 `executors` 或全局 `quiet_policy` 后，必须支持通过显式 reload API 重新加载运行时配置，不要求用户重启 daemon。
+- 显式 reload 不热更新数据库路径、监听地址、端口、API token 和调度间隔；这些启动级配置变更仍要求重启 daemon。
 - OpenClaw executor 默认使用 `mode=hooks_agent` 调用 OpenClaw `/hooks/agent`，让 OpenClaw agent 处理提醒文本并通过 `deliver=true` 投递到聊天渠道。
 - OpenClaw executor 必须支持 `token_env`，避免把 OpenClaw hook token 写入任务或 executor JSON。
 - OpenClaw executor 必须支持 `/hooks/agent` 的可选字段：`name`、`agent_id`、`wake_mode`、`deliver`、`channel`、`to`、`model`、`fallbacks`、`thinking`、`timeout_seconds`。
@@ -52,7 +56,7 @@
 - 提供 `xushi-skills` 任务类型指南包，帮助 agent 判断任务类型、生成任务 schema、配置跟进策略并在需求不明确时追问用户。
 - 安装指南必须要求 agent 在安装前询问用户是否安装 `xushi-skills`，并明确强烈推荐安装；用户同意后应通过静默参数完成安装，不在脚本执行中二次追问。
 - 安装指南必须要求 agent 在配置完成后与用户互动，发送真实测试提醒并确认目标渠道能够正常收到消息，不能只以 `xushi doctor` 作为安装完成标准。
-- 安装后的配置引导必须突出易错点：agent/plugin 环境变量作用域、本地 token 是否同步、`xushi-daemon` 是否重启、executor id 是否与 `action.executor_id` 精确匹配、hook URL 是否可从 daemon 访问，以及 OpenClaw/Hermes 渠道路由是否真正送达用户。
+- 安装后的配置引导必须突出易错点：agent/plugin 环境变量作用域、本地 token 是否同步、`xushi-daemon` 是否已 reload 或重启、executor id 是否与 `action.executor_id` 精确匹配、hook URL 是否可从 daemon 访问，以及 OpenClaw/Hermes 渠道路由是否真正送达用户。
 - 安装脚本必须支持通过显式参数安装辅助 skill 目标；当前仅支持 `openclaw` 和 `hermes`。文档不得再提供 Codex skill 安装目标。
 - 安装脚本必须允许 agent 通过 `XUSHI_OPENCLAW_SKILLS_DIR` / `XUSHI_HERMES_SKILLS_DIR` 或已有的 `OPENCLAW_SKILLS_DIR` / `HERMES_SKILLS_DIR` 指定自定义 skills 根目录，避免不同 agent 目录调整后安装到错误位置。
 - 默认不得未经用户授权修改 agent 工具配置。
@@ -139,3 +143,5 @@
 | 2026-05-10 | 调整 | `xushi-skills` 从独立 Release zip 调整为随 `xushi` 应用打包，通过 `xushi skills install/status` 安装和检查，不再发布 `xushi-skills.zip`。 |
 | 2026-05-10 | 调整 | OpenClaw 插件从独立 Release zip 调整为随 `xushi` 应用打包，通过 `xushi plugins install/status` 安装和检查，并保留 ClawHub 发布入口。 |
 | 2026-05-10 | 明确 | 安装诊断需要覆盖 OpenClaw/Hermes token 作用域、TLS URL、agent 路由和修复后失败投递重试。 |
+| 2026-05-11 | 明确 | 所有 API 具体时间点必须携带时区偏移，并单独保留 IANA 时区用于 RRULE、免打扰和本地日历判断。 |
+| 2026-05-11 | 新增 | 增加显式配置 reload 需求，支持不重启 daemon 更新 executor 和全局免打扰策略。 |

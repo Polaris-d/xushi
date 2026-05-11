@@ -1,5 +1,6 @@
 """HTTP API 测试。"""
 
+import json
 from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
@@ -7,6 +8,26 @@ from fastapi.testclient import TestClient
 from xushi.api import create_app
 from xushi.config import Settings
 from xushi.models import Executor
+
+
+def _write_config(
+    path,
+    *,
+    api_token: str,
+    database_path,
+    executors: list[dict],
+    quiet_policy: dict | None = None,
+) -> None:
+    payload = {
+        "api_token": api_token,
+        "database_path": str(database_path),
+        "host": "127.0.0.1",
+        "port": 18766,
+        "scheduler_interval_seconds": 30,
+        "quiet_policy": quiet_policy or {"enabled": False},
+        "executors": executors,
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
 
 
 def test_create_and_fetch_task(tmp_path) -> None:
@@ -83,6 +104,28 @@ def test_api_returns_unified_not_found_error(tmp_path) -> None:
         "data": None,
         "errors": [{"detail": "task not found"}],
     }
+
+
+def test_create_task_rejects_naive_datetime(tmp_path) -> None:
+    settings = Settings(database_path=tmp_path / "xushi.db", api_token="test-token")
+    client = TestClient(create_app(settings))
+
+    response = client.post(
+        "/api/v1/tasks",
+        headers={"Authorization": "Bearer test-token"},
+        json={
+            "title": "饭后吃药",
+            "schedule": {
+                "kind": "one_shot",
+                "run_at": "2026-05-09T12:00:00",
+                "timezone": "Asia/Shanghai",
+            },
+            "action": {"type": "reminder", "payload": {"message": "饭后吃药"}},
+        },
+    )
+
+    assert response.status_code == 422
+    assert "timezone-aware" in response.text
 
 
 def test_confirm_run_endpoint(tmp_path) -> None:
@@ -249,6 +292,166 @@ def test_retry_deliveries_endpoint(tmp_path, monkeypatch) -> None:
     assert len(retried) == 1
     assert retried[0]["status"] == "failed"
     assert retried[0]["result"]["retry_of"] == failed_delivery_id
+
+
+def test_config_reload_updates_runtime_executors_and_quiet_policy(tmp_path, monkeypatch) -> None:
+    config_path = tmp_path / "config.json"
+    database_path = tmp_path / "xushi.db"
+    old_executors = [
+        {
+            "id": "old-openclaw",
+            "kind": "openclaw",
+            "name": "Old OpenClaw",
+            "config": {
+                "mode": "hooks_agent",
+                "webhook_url": "http://127.0.0.1:18789/hooks/agent",
+            },
+        }
+    ]
+    new_executors = [
+        {
+            "id": "new-openclaw",
+            "kind": "openclaw",
+            "name": "New OpenClaw",
+            "config": {
+                "mode": "hooks_agent",
+                "webhook_url": "http://127.0.0.1:18790/hooks/agent",
+            },
+        }
+    ]
+    _write_config(
+        config_path,
+        api_token="old-token",
+        database_path=database_path,
+        executors=old_executors,
+    )
+    monkeypatch.setenv("XUSHI_CONFIG_PATH", str(config_path))
+    client = TestClient(create_app())
+
+    before_reload = client.get(
+        "/api/v1/executors",
+        headers={"Authorization": "Bearer old-token"},
+    )
+
+    _write_config(
+        config_path,
+        api_token="new-token",
+        database_path=tmp_path / "changed.db",
+        executors=new_executors,
+        quiet_policy={
+            "enabled": True,
+            "timezone": "Asia/Shanghai",
+            "windows": [{"start": "00:00", "end": "24:00", "days": "everyday"}],
+            "behavior": "delay",
+        },
+    )
+    reload_response = client.post(
+        "/api/v1/config/reload",
+        headers={"Authorization": "Bearer old-token"},
+    )
+    after_reload = client.get(
+        "/api/v1/executors",
+        headers={"Authorization": "Bearer old-token"},
+    )
+    new_token_response = client.get(
+        "/api/v1/executors",
+        headers={"Authorization": "Bearer new-token"},
+    )
+    create_response = client.post(
+        "/api/v1/tasks",
+        headers={"Authorization": "Bearer old-token"},
+        json={
+            "title": "夜间提醒",
+            "schedule": {
+                "kind": "one_shot",
+                "run_at": "2026-05-11T23:00:00+08:00",
+                "timezone": "Asia/Shanghai",
+            },
+            "action": {"type": "reminder", "payload": {"message": "夜间提醒"}},
+        },
+    )
+    task_id = create_response.json()["data"]["id"]
+    run_response = client.post(
+        f"/api/v1/tasks/{task_id}/runs",
+        headers={"Authorization": "Bearer old-token"},
+    )
+    deliveries_response = client.get(
+        "/api/v1/deliveries",
+        headers={"Authorization": "Bearer old-token"},
+    )
+
+    assert before_reload.json()["data"][0]["id"] == "old-openclaw"
+    assert reload_response.status_code == 200
+    assert reload_response.json()["data"] == {
+        "reloaded": ["executors", "quiet_policy"],
+        "restart_required": [
+            "api_token",
+            "database_path",
+            "host",
+            "port",
+            "scheduler_interval_seconds",
+        ],
+        "executors": 1,
+        "enabled_executors": 1,
+        "quiet_policy_enabled": True,
+    }
+    assert after_reload.json()["data"][0]["id"] == "new-openclaw"
+    assert new_token_response.status_code == 401
+    assert run_response.json()["data"]["status"] == "pending_delivery"
+    assert deliveries_response.json()["data"][0]["status"] == "delayed"
+
+
+def test_config_reload_keeps_previous_runtime_when_config_is_invalid(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    config_path = tmp_path / "config.json"
+    old_executors = [
+        {
+            "id": "old-openclaw",
+            "kind": "openclaw",
+            "name": "Old OpenClaw",
+            "config": {
+                "mode": "hooks_agent",
+                "webhook_url": "http://127.0.0.1:18789/hooks/agent",
+            },
+        }
+    ]
+    _write_config(
+        config_path,
+        api_token="old-token",
+        database_path=tmp_path / "xushi.db",
+        executors=old_executors,
+    )
+    monkeypatch.setenv("XUSHI_CONFIG_PATH", str(config_path))
+    client = TestClient(create_app())
+
+    _write_config(
+        config_path,
+        api_token="old-token",
+        database_path=tmp_path / "xushi.db",
+        executors=[
+            {
+                "id": "bad-executor",
+                "kind": "command",
+                "name": "Bad Executor",
+                "config": {},
+            }
+        ],
+    )
+
+    reload_response = client.post(
+        "/api/v1/config/reload",
+        headers={"Authorization": "Bearer old-token"},
+    )
+    executors_response = client.get(
+        "/api/v1/executors",
+        headers={"Authorization": "Bearer old-token"},
+    )
+
+    assert reload_response.status_code == 400
+    assert reload_response.json()["message"] == "config reload failed"
+    assert executors_response.json()["data"][0]["id"] == "old-openclaw"
 
 
 def test_executor_api_is_read_only_and_uses_config_file(tmp_path) -> None:

@@ -166,6 +166,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         deliveries = service.retry_failed_deliveries(limit=limit)
         return api_response([delivery.model_dump(mode="json") for delivery in deliveries])
 
+    @app.post("/api/v1/config/reload", dependencies=[Depends(require_token)])
+    def reload_config() -> dict[str, Any]:
+        try:
+            reloaded_settings = Settings.from_env()
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail="config reload failed") from exc
+        return api_response(service.reload_runtime_settings(reloaded_settings))
+
     @app.post("/api/v1/runs/{run_id}/confirm", dependencies=[Depends(require_token)])
     def confirm_run(run_id: str) -> dict[str, Any]:
         run = service.confirm_run(run_id)

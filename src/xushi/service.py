@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -360,6 +361,34 @@ class XushiService:
     def list_executors(self) -> list[Executor]:
         """列出执行器。"""
         return list(self.settings.executors)
+
+    def reload_runtime_settings(self, settings: Settings) -> dict[str, object]:
+        """热更新可运行时替换的配置。"""
+        self.settings = replace(
+            self.settings,
+            quiet_policy=settings.quiet_policy,
+            executors=settings.executors,
+        )
+        self.quiet_policy = QuietPolicyEngine(
+            settings.quiet_policy,
+            self.scheduler.calendar,
+        )
+        self._executor_map = {
+            executor.id: executor for executor in settings.executors if executor.enabled
+        }
+        return {
+            "reloaded": ["executors", "quiet_policy"],
+            "restart_required": [
+                "api_token",
+                "database_path",
+                "host",
+                "port",
+                "scheduler_interval_seconds",
+            ],
+            "executors": len(settings.executors),
+            "enabled_executors": len(self._executor_map),
+            "quiet_policy_enabled": settings.quiet_policy.enabled,
+        }
 
     def list_notifications(self) -> list[NotificationEvent]:
         """列出通知事件。"""

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, tzinfo
+from datetime import UTC, datetime, tzinfo
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dateutil import tz
@@ -23,3 +23,12 @@ def get_tzinfo(name: str) -> tzinfo:
         if fallback is None:
             raise
         return fallback
+
+
+def ensure_timezone_aware(value: datetime | None) -> datetime | None:
+    """确保具体时间点携带时区信息。"""
+    if value is None:
+        return None
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError("datetime must be timezone-aware")
+    return value

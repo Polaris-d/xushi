@@ -68,7 +68,7 @@ export default definePluginEntry({
     api.registerTool({
       name: "xushi_create_task",
       description:
-        "创建结构化序时任务。请先把用户自然语言转换为 xushi task schema：schedule 必须包含 timezone；尽快任务用 asap，一次性任务用 ISO run_at，循环任务用 RRULE。免打扰属于 quiet_policy / delivery 层，普通任务默认继承全局 quiet_policy；明确夜间提醒才设置 quiet_policy.mode=bypass。若用户希望提醒通过 OpenClaw/飞书等 agent 渠道送达，请先在 ~/.xushi/config.json 配置 executor，并在 task.action.executor_id 中引用它。",
+        "创建结构化序时任务。请先把用户自然语言转换为 xushi task schema：所有具体时间必须带时区偏移，schedule 必须包含 IANA timezone；尽快任务用 asap，一次性任务用 ISO run_at，循环任务用 RRULE，BYHOUR/BYMINUTE 按 schedule.timezone 解释。免打扰属于 quiet_policy / delivery 层，普通任务默认继承全局 quiet_policy；明确夜间提醒才设置 quiet_policy.mode=bypass。若用户希望提醒通过 OpenClaw/飞书等 agent 渠道送达，请先在 ~/.xushi/config.json 配置 executor，并在 task.action.executor_id 中引用它。",
       parameters: Type.Object({
         task: Type.Record(Type.String(), Type.Any(), {
           description: "符合 xushi TaskCreate schema 的任务 JSON。",
@@ -152,7 +152,7 @@ export default definePluginEntry({
     api.registerTool({
       name: "xushi_retry_deliveries",
       description:
-        "重试仍需要投递的 failed delivery。修复 executor token、URL、TLS 或 agent_id 配置并重启 daemon 后再使用。",
+        "重试仍需要投递的 failed delivery。修复 executor token、URL、TLS 或 agent_id 配置后，先 reload config 或按需重启 daemon，再使用。",
       parameters: Type.Object({
         limit: Type.Optional(Type.Number({ description: "最多重试多少条 failed delivery。" })),
       }),
@@ -161,6 +161,18 @@ export default definePluginEntry({
           await xushiRequest(config, withQuery("/api/v1/deliveries/retry", params), {
             method: "POST",
           }),
+        );
+      },
+    });
+
+    api.registerTool({
+      name: "xushi_reload_config",
+      description:
+        "显式重新加载 xushi config.json 中的 executors 和全局 quiet_policy。API token、数据库路径、监听端口和调度间隔仍需要重启 daemon。",
+      parameters: Type.Object({}),
+      async execute() {
+        return textResult(
+          await xushiRequest(config, "/api/v1/config/reload", { method: "POST" }),
         );
       },
     });

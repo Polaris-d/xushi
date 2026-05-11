@@ -109,6 +109,103 @@ def test_cli_retry_deliveries_requeues_failed_delivery(tmp_path, monkeypatch) ->
     assert payload[0]["result"]["retry_of"] == failed_delivery.id
 
 
+def test_cli_reload_config_posts_to_running_daemon(tmp_path, monkeypatch) -> None:
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "api_token": "test-token",
+                "host": "127.0.0.1",
+                "port": 18766,
+                "database_path": str(tmp_path / "xushi.db"),
+            }
+        ),
+        encoding="utf-8",
+    )
+    requests = []
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "status": 200,
+                    "code": 200,
+                    "message": "ok",
+                    "data": {"reloaded": ["executors", "quiet_policy"]},
+                    "errors": [],
+                }
+            ).encode("utf-8")
+
+    def fake_urlopen(req, timeout: int):
+        requests.append((req.full_url, req.headers["Authorization"], req.data, timeout))
+        return FakeResponse()
+
+    monkeypatch.setattr("xushi.cli.request.urlopen", fake_urlopen)
+
+    result = CliRunner().invoke(app, ["reload-config", "--config-path", str(config_path)])
+
+    assert result.exit_code == 0
+    assert requests == [
+        (
+            "http://127.0.0.1:18766/api/v1/config/reload",
+            "Bearer test-token",
+            b"",
+            10,
+        )
+    ]
+    assert json.loads(result.output)["data"]["reloaded"] == ["executors", "quiet_policy"]
+
+
+def test_cli_reload_config_does_not_validate_runtime_config_before_request(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "api_token": "test-token",
+                "host": "127.0.0.1",
+                "port": 18766,
+                "database_path": str(tmp_path / "xushi.db"),
+                "executors": [{"id": "bad", "kind": "command", "config": {}}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "status": 400,
+                    "code": 400,
+                    "message": "config reload failed",
+                    "data": None,
+                    "errors": [{"detail": "config reload failed"}],
+                }
+            ).encode("utf-8")
+
+    monkeypatch.setattr("xushi.cli.request.urlopen", lambda *_args, **_kwargs: FakeResponse())
+
+    result = CliRunner().invoke(app, ["reload-config", "--config-path", str(config_path)])
+
+    assert result.exit_code == 0
+    assert json.loads(result.output)["message"] == "config reload failed"
+
+
 def test_cli_installs_bundled_skills(tmp_path) -> None:
     openclaw_dir = tmp_path / "openclaw-skills"
     hermes_dir = tmp_path / "hermes-skills"

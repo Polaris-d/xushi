@@ -10,7 +10,7 @@ from uuid import uuid4
 from dateutil.rrule import rrulestr
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from xushi.timezone import get_tzinfo
+from xushi.timezone import ensure_timezone_aware, get_tzinfo
 
 
 class MissedPolicy(StrEnum):
@@ -78,6 +78,12 @@ class Schedule(BaseModel):
         """校验 IANA 时区标识。"""
         get_tzinfo(value)
         return value
+
+    @field_validator("run_at", "window_start", "window_end", "deadline")
+    @classmethod
+    def validate_datetime_timezone(cls, value: datetime | None) -> datetime | None:
+        """校验具体时间点必须包含时区。"""
+        return ensure_timezone_aware(value)
 
     @model_validator(mode="after")
     def validate_schedule_shape(self) -> Schedule:
@@ -251,6 +257,12 @@ class Task(TaskCreate):
 
     model_config = ConfigDict(use_enum_values=True)
 
+    @field_validator("created_at", "updated_at")
+    @classmethod
+    def validate_datetime_timezone(cls, value: datetime) -> datetime:
+        """校验持久化任务时间必须包含时区。"""
+        return ensure_timezone_aware(value)
+
 
 class TaskPatch(BaseModel):
     """更新任务请求。"""
@@ -282,6 +294,12 @@ class Run(BaseModel):
 
     model_config = ConfigDict(use_enum_values=True)
 
+    @field_validator("scheduled_for", "started_at", "finished_at", "confirmed_at")
+    @classmethod
+    def validate_datetime_timezone(cls, value: datetime | None) -> datetime | None:
+        """校验运行记录时间必须包含时区。"""
+        return ensure_timezone_aware(value)
+
 
 class Delivery(BaseModel):
     """一次到期事件的投递计划与结果。"""
@@ -304,6 +322,12 @@ class Delivery(BaseModel):
 
     model_config = ConfigDict(use_enum_values=True)
 
+    @field_validator("due_at", "deliver_at", "created_at", "updated_at")
+    @classmethod
+    def validate_datetime_timezone(cls, value: datetime) -> datetime:
+        """校验投递计划时间必须包含时区。"""
+        return ensure_timezone_aware(value)
+
 
 class RunCallback(BaseModel):
     """外部执行器回调更新运行结果。"""
@@ -312,6 +336,12 @@ class RunCallback(BaseModel):
     result: dict[str, Any] = Field(default_factory=dict)
     error: str | None = None
     finished_at: datetime | None = None
+
+    @field_validator("finished_at")
+    @classmethod
+    def validate_datetime_timezone(cls, value: datetime | None) -> datetime | None:
+        """校验回调完成时间必须包含时区。"""
+        return ensure_timezone_aware(value)
 
 
 class Executor(BaseModel):

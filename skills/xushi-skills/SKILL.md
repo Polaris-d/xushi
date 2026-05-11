@@ -9,6 +9,13 @@ description: Use when an agent needs to install, configure, or operate xushi wit
 
 Use this skill to operate xushi as an agent-facing local scheduler. Prefer it whenever a user asks for reminders, recurring habits, deadlines, follow-ups, local daemon setup, executor delivery, or task confirmation through xushi.
 
+## Time Rules
+
+- Every concrete datetime sent to xushi must include an explicit timezone offset, such as `2026-05-11T09:00:00+08:00` or `2026-05-11T01:00:00Z`. Never send naive datetimes such as `2026-05-11T09:00:00`.
+- Always include an IANA `schedule.timezone`, such as `Asia/Shanghai`, for task-local calendar semantics. Offset and timezone are different: the offset identifies an instant; `schedule.timezone` tells xushi how to interpret RRULE wall-clock fields, workday policy, and local user expectations.
+- RRULE fields such as `BYHOUR`, `BYMINUTE`, and `BYDAY` are meant to describe the user's local wall-clock rhythm in `schedule.timezone`. For exact wall-clock minute schedules, include `BYSECOND=0` or use examples that have zero seconds.
+- Quiet windows use the user's configured quiet-policy timezone. Do not encode sleep or focus windows inside `schedule`; use global or task `quiet_policy`.
+
 ## Core Workflow
 
 1. Identify the user's scheduling intent before writing JSON.
@@ -31,11 +38,11 @@ Use this skill to operate xushi as an agent-facing local scheduler. Prefer it wh
 
 - Before installing agent add-ons, ask the user whether to install the OpenClaw plugin and `xushi-skills`. Strongly recommend yes for OpenClaw/Hermes users, then use installer parameters for non-interactive installation.
 - Keep token scopes separate: `XUSHI_API_TOKEN` belongs to the agent/plugin process that calls xushi; `OPENCLAW_HOOKS_TOKEN` and `HERMES_API_TOKEN` belong to the `xushi-daemon` process that calls agent hooks.
-- After changing `~/.xushi/config.json` or daemon-side hook tokens, restart `xushi-daemon` and run `xushi doctor`.
+- After changing `~/.xushi/config.json` executors or global `quiet_policy`, call `xushi_reload_config` from the OpenClaw plugin, run `xushi reload-config`, or `POST /api/v1/config/reload` to refresh the daemon without restarting. Restart `xushi-daemon` for API token, database path, host, port, scheduler interval, or daemon-side environment variable changes.
 - For OpenClaw TLS, match the URL scheme to the Gateway. HTTPS Gateway needs `https://...`; local self-signed HTTPS also needs `"insecure_tls": true`.
 - For OpenClaw routing, set `agent_id` when the reminder must reach a specific working agent. If it is missing, OpenClaw may use its default agent/session.
 - After configuration, create one unique smoke-test reminder with `action.executor_id` set, then ask the user whether the target channel received it.
-- If a delivery failed before the configuration was fixed, use `xushi_retry_deliveries` from the OpenClaw plugin or `xushi retry-deliveries` from the shell after restarting the daemon.
+- If a delivery failed before the configuration was fixed, reload config or restart as needed, then use `xushi_retry_deliveries` from the OpenClaw plugin or `xushi retry-deliveries` from the shell.
 
 ## Reference Map
 
@@ -47,6 +54,7 @@ Use this skill to operate xushi as an agent-facing local scheduler. Prefer it wh
 ## Guardrails
 
 - Do not silently create tasks when the type is ambiguous and a wrong schedule would create real user friction.
+- Never omit timezone offsets from `run_at`, `deadline`, `window_start`, `window_end`, callback `finished_at`, or other concrete time fields. xushi rejects naive datetimes because the daemon cannot safely guess the user's timezone.
 - Prefer OpenClaw and Hermes integration paths when configuring agent delivery. Use the OpenClaw plugin and `/hooks/agent` executor or the Hermes agent webhook when they are available.
 - For drinking water, standing up, stretching, eye rest, and similar habits, default to `recurring` with `anchor: "completion"` and `requires_confirmation: true` because the next reminder should usually be based on the user's actual completion time.
 - For night disturbance, prefer the user's global `quiet_policy`. New tasks inherit it by default; only set task `quiet_policy.mode` to `override` or `bypass` when the user clearly wants task-specific behavior.

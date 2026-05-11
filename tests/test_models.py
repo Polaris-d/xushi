@@ -18,6 +18,37 @@ def test_recurring_schedule_requires_rrule() -> None:
         Schedule(kind="recurring", run_at=datetime(2026, 5, 9, 12, 0, tzinfo=UTC), timezone="UTC")
 
 
+def test_schedule_rejects_naive_datetime_fields() -> None:
+    cases = [
+        {
+            "kind": "one_shot",
+            "run_at": datetime(2026, 5, 9, 12, 0),
+            "timezone": "Asia/Shanghai",
+        },
+        {
+            "kind": "recurring",
+            "run_at": datetime(2026, 5, 9, 12, 0),
+            "rrule": "FREQ=DAILY",
+            "timezone": "Asia/Shanghai",
+        },
+        {
+            "kind": "window",
+            "window_start": datetime(2026, 5, 9, 12, 0),
+            "window_end": datetime(2026, 5, 9, 13, 0, tzinfo=UTC),
+            "timezone": "Asia/Shanghai",
+        },
+        {
+            "kind": "deadline",
+            "deadline": datetime(2026, 5, 9, 18, 0),
+            "timezone": "Asia/Shanghai",
+        },
+    ]
+
+    for data in cases:
+        with pytest.raises(ValidationError, match="timezone-aware"):
+            Schedule(**data)
+
+
 def test_quiet_policy_accepts_multiple_windows() -> None:
     policy = QuietPolicy(
         enabled=True,

@@ -106,7 +106,7 @@ Completion-based habits should keep `anchor: "completion"`. Night-time behavior 
 
 ## Agent Executors
 
-Executors are local config, not runtime data. Put them in the `executors` array in `~/.xushi/config.json`, then restart `xushi-daemon`.
+Executors are local config, not task data. Put them in the `executors` array in `~/.xushi/config.json`. After changing `executors` or the global `quiet_policy`, run `xushi reload-config`, call the OpenClaw tool `xushi_reload_config`, or POST `/api/v1/config/reload` to refresh the running daemon. API token, database path, host, port, scheduler interval, and daemon-side environment variable changes still require restarting `xushi-daemon`.
 
 OpenClaw:
 
@@ -155,9 +155,10 @@ Use environment variables for tokens. Do not store real secrets in task JSON, sa
 
 There are two separate token directions: the OpenClaw plugin uses `XUSHI_API_TOKEN` when calling the xushi API, while `xushi-daemon` uses `OPENCLAW_HOOKS_TOKEN` when calling OpenClaw hooks. The hook token must be present in the daemon process environment. If OpenClaw Gateway uses HTTPS, set the executor `webhook_url` to `https://...`; use `"insecure_tls": true` only for local self-signed TLS. Set `agent_id` when reminders must route to the current working agent instead of OpenClaw's default agent/session.
 
-After fixing executor token, URL, TLS, or route settings and restarting the daemon, retry failed deliveries with:
+After fixing executor token, URL, TLS, or route settings, reload config first. If you changed daemon environment variables or startup-level settings, restart the daemon instead. Then retry failed deliveries with:
 
 ```powershell
+xushi reload-config
 xushi retry-deliveries
 ```
 

@@ -8,6 +8,7 @@ from dateutil.rrule import rrulestr
 
 from xushi.calendar import ChinaWorkdayCalendar
 from xushi.models import FollowUpPolicy, MissedPolicy, Task
+from xushi.timezone import get_tzinfo
 
 
 def parse_iso_duration(value: str | None) -> timedelta:
@@ -57,37 +58,50 @@ class Scheduler:
     ) -> list[datetime]:
         """返回当前应触发的调度时间列表。"""
         schedule = task.schedule
+        current = self._as_schedule_time(now, schedule.timezone)
         if schedule.kind == "one_shot":
             if schedule.run_at is None:
                 return []
-            scheduled_for = self._apply_calendar_policy(schedule.run_at, schedule.calendar_policy)
-            if last_scheduled_for is not None or scheduled_for > now:
+            scheduled_for = self._apply_calendar_policy(
+                self._as_schedule_time(schedule.run_at, schedule.timezone),
+                schedule.calendar_policy,
+            )
+            if last_scheduled_for is not None or scheduled_for > current:
                 return []
-            if self._is_expired(scheduled_for, schedule.expiry, now):
+            if self._is_expired(scheduled_for, schedule.expiry, current):
                 return []
             return [scheduled_for]
 
         if schedule.kind == "window":
             if schedule.window_start is None or schedule.window_end is None:
                 return []
-            window_start = self._apply_calendar_policy(
+            raw_window_start = self._as_schedule_time(
                 schedule.window_start,
+                schedule.timezone,
+            )
+            window_start = self._apply_calendar_policy(
+                raw_window_start,
                 schedule.calendar_policy,
             )
-            window_end = schedule.window_end + (window_start - schedule.window_start)
-            if last_scheduled_for is not None or now < window_start or now > window_end:
+            window_end = self._as_schedule_time(schedule.window_end, schedule.timezone) + (
+                window_start - raw_window_start
+            )
+            if last_scheduled_for is not None or current < window_start or current > window_end:
                 return []
-            if self._is_expired(window_start, schedule.expiry, now):
+            if self._is_expired(window_start, schedule.expiry, current):
                 return []
             return [window_start]
 
         if schedule.kind == "deadline":
             if schedule.deadline is None:
                 return []
-            deadline = self._apply_calendar_policy(schedule.deadline, schedule.calendar_policy)
-            if last_scheduled_for is not None or deadline > now:
+            deadline = self._apply_calendar_policy(
+                self._as_schedule_time(schedule.deadline, schedule.timezone),
+                schedule.calendar_policy,
+            )
+            if last_scheduled_for is not None or deadline > current:
                 return []
-            if self._is_expired(deadline, schedule.expiry, now):
+            if self._is_expired(deadline, schedule.expiry, current):
                 return []
             return [deadline]
 
@@ -95,29 +109,36 @@ class Scheduler:
             return []
 
         if schedule.kind == "asap":
-            scheduled_for = self._apply_calendar_policy(task.created_at, schedule.calendar_policy)
-            if last_scheduled_for is not None or scheduled_for > now:
+            scheduled_for = self._apply_calendar_policy(
+                self._as_schedule_time(task.created_at, schedule.timezone),
+                schedule.calendar_policy,
+            )
+            if last_scheduled_for is not None or scheduled_for > current:
                 return []
-            if self._is_expired(scheduled_for, schedule.expiry, now):
+            if self._is_expired(scheduled_for, schedule.expiry, current):
                 return []
             return [scheduled_for]
 
         if schedule.kind != "recurring" or schedule.run_at is None or not schedule.rrule:
             return []
 
-        dtstart = schedule.run_at
-        start_after = last_scheduled_for or schedule.run_at
+        dtstart = self._as_schedule_time(schedule.run_at, schedule.timezone)
+        start_after = (
+            self._as_schedule_time(last_scheduled_for, schedule.timezone)
+            if last_scheduled_for is not None
+            else dtstart
+        )
         include_start = last_scheduled_for is None
         if schedule.anchor == "completion" and last_scheduled_for is not None:
             if last_completed_at is None:
                 return []
-            dtstart = last_completed_at
-            start_after = last_completed_at
+            dtstart = self._as_schedule_time(last_completed_at, schedule.timezone)
+            start_after = dtstart
             include_start = False
 
-        rule = rrulestr(schedule.rrule, dtstart=dtstart)
-        raw_occurrences = list(rule.between(start_after, now, inc=include_start))
-        occurrences = self._eligible_occurrences(raw_occurrences, task, now)
+        rule = rrulestr(self._rrule_with_default_seconds(schedule.rrule), dtstart=dtstart)
+        raw_occurrences = list(rule.between(start_after, current, inc=include_start))
+        occurrences = self._eligible_occurrences(raw_occurrences, task, current)
         if not occurrences:
             return []
 
@@ -180,3 +201,12 @@ class Scheduler:
         if next_workday == value.date():
             return value
         return value + (next_workday - value.date())
+
+    def _as_schedule_time(self, value: datetime, timezone: str) -> datetime:
+        return value.astimezone(get_tzinfo(timezone))
+
+    def _rrule_with_default_seconds(self, rrule: str) -> str:
+        parts = {part.split("=", maxsplit=1)[0].upper() for part in rrule.split(";")}
+        if "BYMINUTE" in parts and "BYSECOND" not in parts:
+            return f"{rrule};BYSECOND=0"
+        return rrule

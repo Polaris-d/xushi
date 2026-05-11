@@ -2,6 +2,12 @@
 
 Use these patterns as starting points. Always adapt timezone, time, executor, and follow-up behavior to the user's actual request.
 
+Hard time rules:
+
+- Concrete datetime fields must include an offset (`Z`, `+08:00`, etc.). Do not send naive values like `2026-05-10T09:00:00`.
+- `schedule.timezone` must be an IANA timezone such as `Asia/Shanghai`. xushi uses it to interpret RRULE wall-clock fields, workday policy, and task-local calendar behavior.
+- Quiet policy has its own timezone for delivery behavior. Use it for sleep/focus windows instead of changing schedule semantics.
+
 ## Completion-Based Habit
 
 Good for drinking water, standing up, stretching, eye rest, and similar tasks.
@@ -101,7 +107,7 @@ Good for fixed medicine times, weekly meetings, rent, daily reports, and other w
   "schedule": {
     "kind": "recurring",
     "run_at": "2026-05-10T08:15:00+08:00",
-    "rrule": "FREQ=DAILY",
+    "rrule": "FREQ=DAILY;BYHOUR=8;BYMINUTE=15;BYSECOND=0",
     "timezone": "Asia/Shanghai",
     "anchor": "calendar",
     "missed_policy": "catch_up_latest"

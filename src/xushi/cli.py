@@ -7,6 +7,7 @@ import os
 import socket
 from pathlib import Path
 from typing import Annotated, Any
+from urllib import error, request
 
 import typer
 
@@ -15,7 +16,15 @@ from xushi.bridges import (
     DEFAULT_OPENCLAW_TOKEN_ENVS,
     parse_bool,
 )
-from xushi.config import Settings, default_config_path, write_initial_config
+from xushi.config import (
+    DEFAULT_DEV_TOKEN,
+    DEFAULT_HOST,
+    DEFAULT_PORT,
+    Settings,
+    default_config_path,
+    load_config,
+    write_initial_config,
+)
 from xushi.models import Executor, RunStatus, TaskCreate
 from xushi.plugins import bundled_plugin_status, install_bundled_plugin
 from xushi.service import XushiService
@@ -73,6 +82,88 @@ def _upgrade_manager(
 def _echo_json(payload: object) -> None:
     """输出 JSON。"""
     typer.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+
+
+def _load_raw_config(config_path: Path | None = None) -> dict[str, Any]:
+    """读取原始配置，不校验 executor 等运行时字段。"""
+    try:
+        return load_config(config_path)
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _coerce_port(value: Any) -> int:
+    """把端口配置转成整数，失败时回退默认端口。"""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return DEFAULT_PORT
+
+
+def _daemon_connection(
+    *,
+    config_path: Path | None,
+    base_url: str | None,
+    token: str | None,
+) -> tuple[str, str]:
+    """解析调用运行中 daemon 所需的地址和 token。"""
+    file_config = _load_raw_config(config_path)
+    host = os.environ.get("XUSHI_HOST", str(file_config.get("host", DEFAULT_HOST)))
+    port = _coerce_port(os.environ.get("XUSHI_PORT", file_config.get("port", DEFAULT_PORT)))
+    resolved_base_url = (
+        base_url or os.environ.get("XUSHI_BASE_URL") or f"http://{host}:{port}"
+    ).rstrip("/")
+    resolved_token = (
+        token
+        or os.environ.get("XUSHI_API_TOKEN")
+        or str(file_config.get("api_token", DEFAULT_DEV_TOKEN))
+    )
+    return resolved_base_url, resolved_token
+
+
+def _post_daemon_json(
+    path: str,
+    *,
+    config_path: Path | None,
+    base_url: str | None,
+    token: str | None,
+    timeout_seconds: int,
+) -> dict[str, Any]:
+    """向运行中 daemon 发送 POST 请求并返回 JSON。"""
+    resolved_base_url, resolved_token = _daemon_connection(
+        config_path=config_path,
+        base_url=base_url,
+        token=token,
+    )
+    req = request.Request(
+        f"{resolved_base_url}{path}",
+        data=b"",
+        headers={"Authorization": f"Bearer {resolved_token}"},
+        method="POST",
+    )
+    try:
+        with request.urlopen(req, timeout=timeout_seconds) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except error.HTTPError as exc:
+        body = exc.read().decode("utf-8")
+        try:
+            payload = json.loads(body)
+        except json.JSONDecodeError:
+            payload = {
+                "status": exc.code,
+                "code": exc.code,
+                "message": f"daemon request failed: HTTP {exc.code}",
+                "data": None,
+                "errors": [{"detail": body}],
+            }
+        _echo_json(payload)
+        raise typer.Exit(1) from exc
+    except (OSError, TimeoutError) as exc:
+        typer.echo(f"daemon request failed: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    except json.JSONDecodeError as exc:
+        typer.echo(f"daemon returned invalid JSON: {exc}", err=True)
+        raise typer.Exit(1) from exc
 
 
 def _executor_report(executor: Executor) -> dict[str, Any]:
@@ -295,11 +386,41 @@ def executor(executor_file: Path) -> None:
         "valid": True,
         "message": (
             "executor 需要写入 ~/.xushi/config.json 的 executors 数组, "
-            "然后重启 daemon 生效。"
+            "然后调用 xushi reload-config 或重启 daemon 生效。"
         ),
         "executor": executor_config.model_dump(mode="json"),
     }
     _echo_json(output)
+
+
+@app.command("reload-config")
+def reload_config(
+    config_path: Annotated[
+        Path | None,
+        typer.Option(help="配置文件路径, 默认使用 ~/.xushi/config.json。"),
+    ] = None,
+    base_url: Annotated[
+        str | None,
+        typer.Option(help="运行中 daemon 的 HTTP 地址, 默认由 XUSHI_BASE_URL 或配置文件推导。"),
+    ] = None,
+    token: Annotated[
+        str | None,
+        typer.Option(help="运行中 daemon 当前接受的 API token, 默认从环境变量或配置文件读取。"),
+    ] = None,
+    timeout_seconds: Annotated[
+        int,
+        typer.Option(help="请求 daemon 的超时时间。"),
+    ] = 10,
+) -> None:
+    """显式重新加载运行中 daemon 的 executor 和全局免打扰配置。"""
+    payload = _post_daemon_json(
+        "/api/v1/config/reload",
+        config_path=config_path,
+        base_url=base_url,
+        token=token,
+        timeout_seconds=timeout_seconds,
+    )
+    _echo_json(payload)
 
 
 @app.command("executors")
