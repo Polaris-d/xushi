@@ -100,8 +100,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return api_response(task.model_dump(mode="json"), "created", 201)
 
     @app.get("/api/v1/tasks", dependencies=[Depends(require_token)])
-    def list_tasks() -> dict[str, Any]:
-        return api_response([task.model_dump(mode="json") for task in service.list_tasks()])
+    def list_tasks(
+        limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    ) -> dict[str, Any]:
+        return api_response(
+            [task.model_dump(mode="json") for task in service.list_tasks(limit=limit)]
+        )
 
     @app.get("/api/v1/tasks/{task_id}", dependencies=[Depends(require_token)])
     def get_task(task_id: str) -> dict[str, Any]:
@@ -141,7 +145,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         task_id: str | None = None,
         status_filter: Annotated[RunStatus | None, Query(alias="status")] = None,
         active_only: bool = False,
-        limit: Annotated[int | None, Query(ge=1, le=500)] = None,
+        limit: Annotated[int, Query(ge=1, le=500)] = 100,
     ) -> dict[str, Any]:
         runs = service.list_runs(
             task_id=task_id,
@@ -158,9 +162,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     @app.get("/api/v1/deliveries", dependencies=[Depends(require_token)])
-    def list_deliveries() -> dict[str, Any]:
+    def list_deliveries(
+        limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    ) -> dict[str, Any]:
         return api_response(
-            [delivery.model_dump(mode="json") for delivery in service.list_deliveries()]
+            [delivery.model_dump(mode="json") for delivery in service.list_deliveries(limit=limit)]
         )
 
     @app.post("/api/v1/deliveries/retry", dependencies=[Depends(require_token)])
@@ -177,6 +183,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except Exception as exc:
             raise HTTPException(status_code=400, detail="config reload failed") from exc
         return api_response(service.reload_runtime_settings(reloaded_settings))
+
+    @app.get("/api/v1/metrics", dependencies=[Depends(require_token)])
+    def metrics() -> dict[str, Any]:
+        return api_response(service.metrics_snapshot())
 
     @app.post("/api/v1/runs/{run_id}/confirm", dependencies=[Depends(require_token)])
     def confirm_run(run_id: str) -> dict[str, Any]:

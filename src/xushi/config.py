@@ -9,13 +9,19 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from xushi.bridges import DEFAULT_OPENCLAW_HOOKS_AGENT_URL
+from xushi.bridges import DEFAULT_OPENCLAW_HOOKS_AGENT_URL, parse_bool
 from xushi.models import Executor, QuietPolicy
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 18766
 DEFAULT_SCHEDULER_INTERVAL_SECONDS = 30
 DEFAULT_DEV_TOKEN = "dev-token"
+DEFAULT_SQLITE_JOURNAL_MODE = "delete"
+DEFAULT_SQLITE_SYNCHRONOUS = "full"
+DEFAULT_AUTO_RETRY_FAILED_DELIVERIES = False
+DEFAULT_AUTO_RETRY_MAX_ATTEMPTS = 1
+SQLITE_JOURNAL_MODES = {"delete", "wal"}
+SQLITE_SYNCHRONOUS_MODES = {"off", "normal", "full"}
 
 
 def default_state_dir() -> Path:
@@ -118,6 +124,10 @@ def write_initial_config(
         "host": DEFAULT_HOST,
         "port": DEFAULT_PORT,
         "scheduler_interval_seconds": DEFAULT_SCHEDULER_INTERVAL_SECONDS,
+        "sqlite_journal_mode": DEFAULT_SQLITE_JOURNAL_MODE,
+        "sqlite_synchronous": DEFAULT_SQLITE_SYNCHRONOUS,
+        "auto_retry_failed_deliveries": DEFAULT_AUTO_RETRY_FAILED_DELIVERIES,
+        "auto_retry_max_attempts": DEFAULT_AUTO_RETRY_MAX_ATTEMPTS,
         "quiet_policy": QuietPolicy().model_dump(mode="json"),
         "executors": [executor.model_dump(mode="json") for executor in default_executors()],
     }
@@ -137,6 +147,10 @@ class Settings:
     host: str = DEFAULT_HOST
     port: int = DEFAULT_PORT
     scheduler_interval_seconds: int = DEFAULT_SCHEDULER_INTERVAL_SECONDS
+    sqlite_journal_mode: str = DEFAULT_SQLITE_JOURNAL_MODE
+    sqlite_synchronous: str = DEFAULT_SQLITE_SYNCHRONOUS
+    auto_retry_failed_deliveries: bool = DEFAULT_AUTO_RETRY_FAILED_DELIVERIES
+    auto_retry_max_attempts: int = DEFAULT_AUTO_RETRY_MAX_ATTEMPTS
     quiet_policy: QuietPolicy = field(default_factory=QuietPolicy)
     executors: tuple[Executor, ...] = field(default_factory=default_executors)
 
@@ -165,6 +179,56 @@ class Settings:
                     ),
                 )
             ),
+            sqlite_journal_mode=_validated_choice(
+                os.environ.get(
+                    "XUSHI_SQLITE_JOURNAL_MODE",
+                    file_config.get("sqlite_journal_mode", DEFAULT_SQLITE_JOURNAL_MODE),
+                ),
+                SQLITE_JOURNAL_MODES,
+                "sqlite_journal_mode",
+            ),
+            sqlite_synchronous=_validated_choice(
+                os.environ.get(
+                    "XUSHI_SQLITE_SYNCHRONOUS",
+                    file_config.get("sqlite_synchronous", DEFAULT_SQLITE_SYNCHRONOUS),
+                ),
+                SQLITE_SYNCHRONOUS_MODES,
+                "sqlite_synchronous",
+            ),
+            auto_retry_failed_deliveries=_config_bool(
+                os.environ.get(
+                    "XUSHI_AUTO_RETRY_FAILED_DELIVERIES",
+                    file_config.get(
+                        "auto_retry_failed_deliveries",
+                        DEFAULT_AUTO_RETRY_FAILED_DELIVERIES,
+                    ),
+                )
+            ),
+            auto_retry_max_attempts=max(
+                0,
+                int(
+                    os.environ.get(
+                        "XUSHI_AUTO_RETRY_MAX_ATTEMPTS",
+                        file_config.get(
+                            "auto_retry_max_attempts",
+                            DEFAULT_AUTO_RETRY_MAX_ATTEMPTS,
+                        ),
+                    )
+                ),
+            ),
             quiet_policy=QuietPolicy.model_validate(file_config.get("quiet_policy", {})),
             executors=_load_executors(file_config),
         )
+
+
+def _validated_choice(value: object, choices: set[str], name: str) -> str:
+    normalized = str(value).strip().lower()
+    if normalized not in choices:
+        raise ValueError(f"{name} must be one of: {', '.join(sorted(choices))}")
+    return normalized
+
+
+def _config_bool(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    return parse_bool(str(value))

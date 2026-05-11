@@ -90,6 +90,36 @@ def test_environment_variables_override_config_file(tmp_path, monkeypatch) -> No
     assert settings.scheduler_interval_seconds == 3
 
 
+def test_settings_loads_storage_and_retry_policy_from_config_file(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "api_token": "token-from-config",
+                "database_path": str(tmp_path / "xushi.db"),
+                "sqlite_journal_mode": "wal",
+                "sqlite_synchronous": "normal",
+                "auto_retry_failed_deliveries": True,
+                "auto_retry_max_attempts": 2,
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("XUSHI_CONFIG_PATH", str(config_path))
+    monkeypatch.delenv("XUSHI_SQLITE_JOURNAL_MODE", raising=False)
+    monkeypatch.delenv("XUSHI_SQLITE_SYNCHRONOUS", raising=False)
+
+    settings = Settings.from_env()
+
+    assert settings.sqlite_journal_mode == "wal"
+    assert settings.sqlite_synchronous == "normal"
+    assert settings.auto_retry_failed_deliveries is True
+    assert settings.auto_retry_max_attempts == 2
+
+
 def test_settings_loads_executor_configuration_from_config_file(tmp_path, monkeypatch) -> None:
     config_path = tmp_path / "config.json"
     config_path.write_text(

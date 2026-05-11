@@ -142,6 +142,10 @@ uv run xushi-daemon
 | `XUSHI_SCHEDULER_INTERVAL_SECONDS` | `30` | 调度扫描间隔 |
 | `XUSHI_DATABASE_PATH` | `~/.xushi/xushi.db` | SQLite 数据库路径 |
 | `XUSHI_API_TOKEN` | 配置文件 token | 覆盖本地 API token |
+| `XUSHI_SQLITE_JOURNAL_MODE` | `delete` | SQLite journal 模式，可选 `wal` 提升并发读写 |
+| `XUSHI_SQLITE_SYNCHRONOUS` | `full` | SQLite 同步策略，可选 `normal` 或 `off` |
+| `XUSHI_AUTO_RETRY_FAILED_DELIVERIES` | `false` | 是否自动重试失败 delivery，默认关闭 |
+| `XUSHI_AUTO_RETRY_MAX_ATTEMPTS` | `1` | 每条失败链最多自动重试次数 |
 | `XUSHI_BIN_DIR` | `~/.xushi/bin` | Release 二进制安装目录 |
 
 ## 示例任务
@@ -221,7 +225,7 @@ uv run xushi-daemon
 
 ## 配置 Agent Executor
 
-Executor 不存入 SQLite，也不能通过 API 写入；请在 `~/.xushi/config.json` 的 `executors` 数组中配置。修改 `executors` 或全局 `quiet_policy` 后，调用 `xushi reload-config`、OpenClaw 工具 `xushi_reload_config`，或 `POST /api/v1/config/reload` 即可让运行中的 daemon 重新加载。修改 API token、数据库路径、监听地址、端口、调度间隔或 daemon 进程环境变量时仍需重启 `xushi-daemon`。
+Executor 不存入 SQLite，也不能通过 API 写入；请在 `~/.xushi/config.json` 的 `executors` 数组中配置。修改 `executors`、全局 `quiet_policy` 或自动重试策略后，调用 `xushi reload-config`、OpenClaw 工具 `xushi_reload_config`，或 `POST /api/v1/config/reload` 即可让运行中的 daemon 重新加载。修改 API token、数据库路径、SQLite PRAGMA、监听地址、端口、调度间隔或 daemon 进程环境变量时仍需重启 `xushi-daemon`。
 
 ### OpenClaw
 
@@ -309,10 +313,19 @@ xushi reload-config
 xushi retry-deliveries
 ```
 
+也可以在配置中打开 `auto_retry_failed_deliveries`，让 daemon 在 tick 中按 `auto_retry_max_attempts` 自动创建有限次数 retry；默认关闭，避免配置错误时反复打扰外部系统。
+
 长任务完成后可回调：
 
 ```http
 GET /api/v1/runs?task_id=<task_id>&active_only=true&limit=10
+Authorization: Bearer <XUSHI_API_TOKEN>
+```
+
+运行期指标可通过本地 API 查看，包含投递成功/失败、自动重试和最近 tick 摘要；列表 API 默认返回 100 条，可显式传 `limit` 调整：
+
+```http
+GET /api/v1/metrics
 Authorization: Bearer <XUSHI_API_TOKEN>
 ```
 

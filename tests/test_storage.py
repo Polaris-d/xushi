@@ -71,6 +71,21 @@ def test_sqlite_schema_adds_query_columns_and_indexes(tmp_path) -> None:
     } <= index_names
 
 
+def test_sqlite_store_applies_configured_pragmas(tmp_path) -> None:
+    store = SQLiteStore(
+        tmp_path / "xushi.db",
+        journal_mode="wal",
+        synchronous="normal",
+    )
+
+    with store._connect() as conn:
+        journal_mode = conn.execute("PRAGMA journal_mode").fetchone()[0].lower()
+        synchronous = conn.execute("PRAGMA synchronous").fetchone()[0]
+
+    assert journal_mode == "wal"
+    assert synchronous == 1
+
+
 def test_sqlite_store_migrates_legacy_task_idempotency_columns(tmp_path) -> None:
     database_path = tmp_path / "xushi.db"
     task = TaskCreate(

@@ -309,7 +309,7 @@ Check these details before testing:
 
 #### 5.6 Reload or restart and verify what xushi actually loaded
 
-After editing `~/.xushi/config.json` executors or global `quiet_policy`, explicitly reload the running daemon:
+After editing `~/.xushi/config.json` executors, global `quiet_policy`, or auto-retry policy, explicitly reload the running daemon:
 
 ```bash
 xushi reload-config
@@ -317,7 +317,7 @@ xushi reload-config
 
 If the OpenClaw plugin is available, call `xushi_reload_config` instead. If using raw HTTP, POST `/api/v1/config/reload` with the current running API token.
 
-Restart `xushi-daemon` only after changing daemon environment variables, API token, database path, host, port, or scheduler interval. Then run:
+Restart `xushi-daemon` only after changing daemon environment variables, API token, database path, SQLite PRAGMA, host, port, or scheduler interval. Then run:
 
 ```bash
 xushi doctor
@@ -403,6 +403,8 @@ xushi deliveries
 xushi notifications
 ```
 
+For daemon liveness and recent scheduler activity, also check `GET /api/v1/metrics` with the running API token. Metrics are in-memory and reset on daemon restart, so use them for operation checks rather than audit history.
+
 Read the result by layer:
 
 - `xushi doctor` fails: local config, database path, token, or port is wrong.
@@ -416,7 +418,7 @@ Read the result by layer:
 - Local notification appears instead of OpenClaw/Hermes: `action.executor_id` was missing or did not exactly match an enabled executor id.
 - Repeated smoke tests reuse an old task: add a unique title or `idempotency_key` for each setup attempt.
 
-Fix the failing layer, reload config for executor or global quiet-policy changes, restart `xushi-daemon` for environment or startup-level changes, then retry the failed delivery or send one new smoke-test reminder:
+Fix the failing layer, reload config for executor, global quiet-policy, or auto-retry changes, restart `xushi-daemon` for environment or startup-level changes, then retry the failed delivery or send one new smoke-test reminder:
 
 ```bash
 xushi reload-config

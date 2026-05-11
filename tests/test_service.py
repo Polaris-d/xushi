@@ -347,6 +347,49 @@ def test_confirm_follow_up_cancels_siblings_and_confirms_origin(tmp_path) -> Non
     assert stored_second_follow_up.status == "cancelled"
 
 
+def test_callback_follow_up_success_confirms_origin_and_cancels_siblings(tmp_path) -> None:
+    service = XushiService(Settings(database_path=tmp_path / "xushi.db", api_token="test-token"))
+    task = service.create_task(
+        TaskCreate(
+            title="久坐提醒",
+            schedule=Schedule(
+                kind="one_shot",
+                run_at=datetime(2026, 5, 9, 12, 0, tzinfo=UTC),
+                timezone="UTC",
+            ),
+            action={"type": "reminder", "payload": {"message": "起来活动"}},
+            follow_up_policy=FollowUpPolicy(
+                requires_confirmation=True,
+                grace_period="PT5M",
+                interval="PT10M",
+                max_attempts=2,
+            ),
+        )
+    )
+    origin = service.trigger_task(task.id, now=datetime(2026, 5, 9, 12, 0, tzinfo=UTC))
+    first_follow_up = service.process_follow_ups(now=datetime(2026, 5, 9, 12, 6, tzinfo=UTC))[0]
+    second_follow_up = service.process_follow_ups(now=datetime(2026, 5, 9, 12, 16, tzinfo=UTC))[0]
+
+    updated = service.callback_run(
+        first_follow_up.id,
+        RunCallback(
+            status="succeeded",
+            result={"agent_run_id": "remote_follow_up"},
+            finished_at=datetime(2026, 5, 9, 12, 20, tzinfo=UTC),
+        ),
+    )
+
+    stored_origin = service.get_run(origin.id)
+    stored_second_follow_up = service.get_run(second_follow_up.id)
+    assert updated is not None
+    assert updated.status == "succeeded"
+    assert stored_origin is not None
+    assert stored_origin.status == "succeeded"
+    assert stored_origin.result["confirmed_by_follow_up"] == first_follow_up.id
+    assert stored_second_follow_up is not None
+    assert stored_second_follow_up.status == "cancelled"
+
+
 def test_confirm_latest_run_confirms_most_recent_primary_run(tmp_path) -> None:
     service = XushiService(Settings(database_path=tmp_path / "xushi.db", api_token="test-token"))
     task = service.create_task(
@@ -864,3 +907,78 @@ def test_completion_anchor_waits_for_confirmation_before_next_run(tmp_path) -> N
     assert before_completion_interval == []
     assert len(after_completion_interval) == 1
     assert after_completion_interval[0].scheduled_for == datetime(2026, 5, 9, 13, 10, tzinfo=UTC)
+
+
+def test_tick_records_runtime_metrics(tmp_path) -> None:
+    service = XushiService(Settings(database_path=tmp_path / "xushi.db", api_token="test-token"))
+    service.create_task(
+        TaskCreate(
+            title="喝水",
+            schedule=Schedule(
+                kind="one_shot",
+                run_at=datetime(2026, 5, 9, 12, 0, tzinfo=UTC),
+                timezone="UTC",
+            ),
+            action={"type": "reminder", "payload": {"message": "喝水"}},
+        )
+    )
+
+    created = service.tick(now=datetime(2026, 5, 9, 12, 1, tzinfo=UTC))
+
+    metrics = service.metrics_snapshot()
+    latest_tick = metrics["recent_ticks"][-1]
+    assert len(created) == 1
+    assert metrics["counters"]["runs_created_total"] == 1
+    assert metrics["counters"]["deliveries_succeeded_total"] == 1
+    assert latest_tick["created_runs"] == 1
+    assert latest_tick["processed_deliveries"] == 0
+    assert latest_tick["created_follow_ups"] == 0
+    assert latest_tick["duration_ms"] >= 0
+
+
+def test_auto_retry_failed_deliveries_respects_attempt_limit(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("OPENCLAW_HOOKS_TOKEN", raising=False)
+    executor = Executor(
+        id="openclaw",
+        kind="openclaw",
+        name="OpenClaw",
+        config={
+            "mode": "hooks_agent",
+            "webhook_url": "http://127.0.0.1:18789/hooks/agent",
+            "token_env": "OPENCLAW_HOOKS_TOKEN",
+        },
+    )
+    service = XushiService(
+        Settings(
+            database_path=tmp_path / "xushi.db",
+            api_token="test-token",
+            executors=(executor,),
+            auto_retry_failed_deliveries=True,
+            auto_retry_max_attempts=1,
+        )
+    )
+    task = service.create_task(
+        TaskCreate(
+            title="喝水",
+            schedule=Schedule(
+                kind="one_shot",
+                run_at=datetime(2026, 5, 9, 12, 0, tzinfo=UTC),
+                timezone="UTC",
+            ),
+            action={
+                "type": "reminder",
+                "executor_id": "openclaw",
+                "payload": {"message": "喝水"},
+            },
+        )
+    )
+    service.trigger_task(task.id, now=datetime(2026, 5, 9, 12, 0, tzinfo=UTC))
+
+    service.tick(now=datetime(2026, 5, 9, 12, 1, tzinfo=UTC))
+    service.tick(now=datetime(2026, 5, 9, 12, 2, tzinfo=UTC))
+
+    deliveries = service.list_deliveries()
+    retry_deliveries = [delivery for delivery in deliveries if delivery.result.get("retry_of")]
+    assert len(deliveries) == 2
+    assert len(retry_deliveries) == 1
+    assert retry_deliveries[0].result["auto_retry_attempts"] == 1

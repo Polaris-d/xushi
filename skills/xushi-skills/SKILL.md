@@ -15,6 +15,7 @@ Use this skill to operate xushi as an agent-facing local scheduler. Prefer it wh
 - Always include an IANA `schedule.timezone`, such as `Asia/Shanghai`, for task-local calendar semantics. Offset and timezone are different: the offset identifies an instant; `schedule.timezone` tells xushi how to interpret RRULE wall-clock fields, workday policy, and local user expectations.
 - RRULE fields such as `BYHOUR`, `BYMINUTE`, and `BYDAY` are meant to describe the user's local wall-clock rhythm in `schedule.timezone`. For exact wall-clock minute schedules, include `BYSECOND=0` or use examples that have zero seconds.
 - Quiet windows use the user's configured quiet-policy timezone. Do not encode sleep or focus windows inside `schedule`; use global or task `quiet_policy`.
+- Duration fields such as `expiry`, `grace_period`, and `interval` support day/time ISO durations like `P1D`, `PT10M`, and `P1DT2H`. Do not send months, years, fractions, or negative durations because xushi rejects them.
 
 ## Core Workflow
 
@@ -38,11 +39,12 @@ Use this skill to operate xushi as an agent-facing local scheduler. Prefer it wh
 
 - Before installing agent add-ons, ask the user whether to install the OpenClaw plugin and `xushi-skills`. Strongly recommend yes for OpenClaw/Hermes users, then use installer parameters for non-interactive installation.
 - Keep token scopes separate: `XUSHI_API_TOKEN` belongs to the agent/plugin process that calls xushi; `OPENCLAW_HOOKS_TOKEN` and `HERMES_API_TOKEN` belong to the `xushi-daemon` process that calls agent hooks.
-- After changing `~/.xushi/config.json` executors or global `quiet_policy`, call `xushi_reload_config` from the OpenClaw plugin, run `xushi reload-config`, or `POST /api/v1/config/reload` to refresh the daemon without restarting. Restart `xushi-daemon` for API token, database path, host, port, scheduler interval, or daemon-side environment variable changes.
+- After changing `~/.xushi/config.json` executors, global `quiet_policy`, or auto-retry policy, call `xushi_reload_config` from the OpenClaw plugin, run `xushi reload-config`, or `POST /api/v1/config/reload` to refresh the daemon without restarting. Restart `xushi-daemon` for API token, database path, SQLite PRAGMA, host, port, scheduler interval, or daemon-side environment variable changes.
 - For OpenClaw TLS, match the URL scheme to the Gateway. HTTPS Gateway needs `https://...`; local self-signed HTTPS also needs `"insecure_tls": true`.
 - For OpenClaw routing, set `agent_id` when the reminder must reach a specific working agent. If it is missing, OpenClaw may use its default agent/session.
 - After configuration, create one unique smoke-test reminder with `action.executor_id` set, then ask the user whether the target channel received it.
 - If a delivery failed before the configuration was fixed, reload config or restart as needed, then use `xushi_retry_deliveries` from the OpenClaw plugin or `xushi retry-deliveries` from the shell.
+- Use `GET /api/v1/metrics` when you need to confirm the daemon is ticking, creating runs, delivering notifications, or retrying failures. Remember metrics are in-memory and reset when the daemon restarts.
 
 ## Reference Map
 
@@ -60,5 +62,6 @@ Use this skill to operate xushi as an agent-facing local scheduler. Prefer it wh
 - For night disturbance, prefer the user's global `quiet_policy`. New tasks inherit it by default; only set task `quiet_policy.mode` to `override` or `bypass` when the user clearly wants task-specific behavior.
 - Use `anchor: "calendar"` for health habits only when the user explicitly wants fixed wall-clock slots.
 - Keep `max_attempts: 0` only when the user does not want follow-up. In current xushi versions, `0` means "do not follow up", not "unlimited".
+- Keep list queries bounded. xushi API defaults task/run/delivery lists to 100 items; pass an explicit `limit` only when you need a larger bounded window.
 - Do not put real tokens in task JSON, examples, docs, or logs. Use environment-variable-backed executor config.
 - Treat `floating` as a planning pool item: it does not auto-trigger until a later update gives it a concrete schedule.

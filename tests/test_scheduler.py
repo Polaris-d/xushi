@@ -2,8 +2,10 @@
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from xushi.models import FollowUpPolicy, MissedPolicy, Schedule, TaskCreate
-from xushi.scheduler import Scheduler
+from xushi.scheduler import Scheduler, parse_iso_duration
 from xushi.timezone import get_tzinfo
 
 
@@ -73,6 +75,22 @@ def test_follow_up_repeats_until_confirmation_or_max_attempts() -> None:
     )
 
     assert next_follow_up == scheduled_for + timedelta(minutes=15)
+
+
+def test_parse_iso_duration_supports_day_time_combinations() -> None:
+    assert parse_iso_duration("P1D") == timedelta(days=1)
+    assert parse_iso_duration("P2DT3H4M5S") == timedelta(
+        days=2,
+        hours=3,
+        minutes=4,
+        seconds=5,
+    )
+
+
+@pytest.mark.parametrize("value", ["P", "P1M", "P1Y", "PT0.5H", "-PT1H"])
+def test_parse_iso_duration_rejects_unsupported_iso_variants(value: str) -> None:
+    with pytest.raises(ValueError, match="unsupported duration"):
+        parse_iso_duration(value)
 
 
 def test_confirmation_stops_follow_up() -> None:

@@ -23,6 +23,7 @@ jobs:
           python-version: "3.12"
       - run: uv sync --dev
       - run: uv run pytest
+      - run: uv run python scripts/check_project_metadata.py
       - run: uv run ruff check .
       - run: uv build --wheel
       - run: uv run --with pyinstaller python scripts/build_binaries.py

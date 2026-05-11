@@ -18,8 +18,16 @@ SCHEMA_VERSION = 1
 class SQLiteStore:
     """序时 SQLite 数据仓库。"""
 
-    def __init__(self, database_path: Path) -> None:
+    def __init__(
+        self,
+        database_path: Path,
+        *,
+        journal_mode: str = "delete",
+        synchronous: str = "full",
+    ) -> None:
         self.database_path = database_path
+        self.journal_mode = journal_mode.upper()
+        self.synchronous = synchronous.upper()
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_schema()
 
@@ -27,11 +35,17 @@ class SQLiteStore:
     def _connect(self) -> Iterator[sqlite3.Connection]:
         conn = sqlite3.connect(self.database_path)
         conn.row_factory = sqlite3.Row
+        self._apply_pragmas(conn)
         try:
             yield conn
             conn.commit()
         finally:
             conn.close()
+
+    def _apply_pragmas(self, conn: sqlite3.Connection) -> None:
+        """按配置应用 SQLite 连接级参数。"""
+        conn.execute(f"PRAGMA journal_mode = {self.journal_mode}")
+        conn.execute(f"PRAGMA synchronous = {self.synchronous}")
 
     def _init_schema(self) -> None:
         with self._connect() as conn:
@@ -235,21 +249,29 @@ class SQLiteStore:
             )
         return task
 
-    def list_tasks(self, status: TaskStatus | str | None = None) -> list[Task]:
+    def list_tasks(
+        self,
+        status: TaskStatus | str | None = None,
+        *,
+        limit: int | None = None,
+    ) -> list[Task]:
         """返回所有任务。"""
+        limit_clause = "LIMIT ?" if limit is not None else ""
+        limit_params = (limit,) if limit is not None else ()
         with self._connect() as conn:
             if status is None:
                 rows = conn.execute(
-                    "SELECT payload FROM tasks ORDER BY created_at DESC"
+                    f"SELECT payload FROM tasks ORDER BY created_at DESC {limit_clause}",
+                    limit_params,
                 ).fetchall()
             else:
                 rows = conn.execute(
-                    """
+                    f"""
                     SELECT payload FROM tasks
                     WHERE status = ?
-                    ORDER BY created_at DESC
+                    ORDER BY created_at DESC {limit_clause}
                     """,
-                    (str(status),),
+                    (str(status), *limit_params),
                 ).fetchall()
         return [Task.model_validate_json(row["payload"]) for row in rows]
 
@@ -479,8 +501,11 @@ class SQLiteStore:
         self,
         *,
         statuses: set[str] | None = None,
+        limit: int | None = None,
     ) -> list[Delivery]:
         """返回所有投递计划。"""
+        limit_clause = "LIMIT ?" if limit is not None else ""
+        limit_params = (limit,) if limit is not None else ()
         with self._connect() as conn:
             if statuses:
                 placeholders = ", ".join("?" for _ in statuses)
@@ -488,13 +513,14 @@ class SQLiteStore:
                     f"""
                     SELECT payload FROM deliveries
                     WHERE status IN ({placeholders})
-                    ORDER BY deliver_at ASC
+                    ORDER BY deliver_at ASC {limit_clause}
                     """,
-                    tuple(sorted(statuses)),
+                    (*tuple(sorted(statuses)), *limit_params),
                 ).fetchall()
             else:
                 rows = conn.execute(
-                    "SELECT payload FROM deliveries ORDER BY deliver_at ASC"
+                    f"SELECT payload FROM deliveries ORDER BY deliver_at ASC {limit_clause}",
+                    limit_params,
                 ).fetchall()
         return [Delivery.model_validate_json(row["payload"]) for row in rows]
 

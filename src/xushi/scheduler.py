@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta
 
 from dateutil.rrule import rrulestr
@@ -10,37 +11,37 @@ from xushi.calendar import ChinaWorkdayCalendar
 from xushi.models import FollowUpPolicy, MissedPolicy, Task
 from xushi.timezone import get_tzinfo
 
+ISO_DURATION_RE = re.compile(
+    r"^P"
+    r"(?:(?P<days>\d+)D)?"
+    r"(?:T"
+    r"(?:(?P<hours>\d+)H)?"
+    r"(?:(?P<minutes>\d+)M)?"
+    r"(?:(?P<seconds>\d+)S)?"
+    r")?$"
+)
+
 
 def parse_iso_duration(value: str | None) -> timedelta:
     """解析常用 ISO 8601 duration。
 
-    v1 先支持 `PT30S`、`PT5M`、`PT1H` 以及它们的组合。
+    支持天与时分秒组合，例如 `P1D`、`PT30S`、`P1DT2H`。
+    月、年、小数、负数存在上下文歧义，当前显式拒绝。
     """
     if not value:
         return timedelta(0)
-    if not value.startswith("PT"):
+    match = ISO_DURATION_RE.fullmatch(value)
+    if match is None:
         raise ValueError(f"unsupported duration: {value}")
-    seconds = 0
-    number = ""
-    for char in value[2:]:
-        if char.isdigit():
-            number += char
-            continue
-        if not number:
-            raise ValueError(f"invalid duration: {value}")
-        amount = int(number)
-        number = ""
-        if char == "H":
-            seconds += amount * 3600
-        elif char == "M":
-            seconds += amount * 60
-        elif char == "S":
-            seconds += amount
-        else:
-            raise ValueError(f"unsupported duration unit: {char}")
-    if number:
-        raise ValueError(f"invalid duration: {value}")
-    return timedelta(seconds=seconds)
+    parts = {key: int(raw) for key, raw in match.groupdict().items() if raw is not None}
+    if not parts:
+        raise ValueError(f"unsupported duration: {value}")
+    return timedelta(
+        days=parts.get("days", 0),
+        hours=parts.get("hours", 0),
+        minutes=parts.get("minutes", 0),
+        seconds=parts.get("seconds", 0),
+    )
 
 
 class Scheduler:

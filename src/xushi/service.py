@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
+from time import perf_counter
 from uuid import uuid4
 
 from xushi.config import Settings
 from xushi.delivery import QuietPolicyEngine, summarize_deliveries
 from xushi.executors import ExecutorRegistry
+from xushi.lifecycle import RunLifecycleService
+from xushi.metrics import RuntimeMetrics
 from xushi.models import (
     Action,
     Delivery,
@@ -43,11 +46,21 @@ class XushiService:
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
-        self.store = SQLiteStore(settings.database_path)
+        self.store = SQLiteStore(
+            settings.database_path,
+            journal_mode=settings.sqlite_journal_mode,
+            synchronous=settings.sqlite_synchronous,
+        )
         self.scheduler = Scheduler()
         self.quiet_policy = QuietPolicyEngine(settings.quiet_policy, self.scheduler.calendar)
         self.notifications = NotificationDispatcher()
         self.executors = ExecutorRegistry(self.notifications)
+        self.metrics = RuntimeMetrics()
+        self.lifecycle = RunLifecycleService(
+            self.store,
+            self._cancel_deliveries_for_run,
+            self._cancel_follow_ups_for_origin,
+        )
         self._executor_map = {
             executor.id: executor for executor in settings.executors if executor.enabled
         }
@@ -67,9 +80,9 @@ class XushiService:
         task = request.to_task()
         return self.store.save_task(task, idempotency_hash=idempotency_hash)
 
-    def list_tasks(self) -> list[Task]:
+    def list_tasks(self, *, limit: int | None = None) -> list[Task]:
         """列出任务。"""
-        return self.store.list_tasks()
+        return self.store.list_tasks(limit=limit)
 
     def get_task(self, task_id: str) -> Task | None:
         """获取任务。"""
@@ -113,6 +126,7 @@ class XushiService:
             status=RunStatus.PENDING_DELIVERY,
         )
         self.store.save_run(run)
+        self.metrics.increment("runs_created_total")
         action = self._action_for_run(task, run, kind="reminder")
         delivery = self._create_delivery(task, run, action, kind="reminder", due_at=scheduled_for)
         if delivery.status in {DeliveryStatus.SKIPPED, DeliveryStatus.SILENCED}:
@@ -126,34 +140,11 @@ class XushiService:
         if run is None:
             return None
         confirmed_at = now or datetime.now(tz=UTC)
-        run.status = RunStatus.SUCCEEDED
-        run.confirmed_at = confirmed_at
-        run.finished_at = confirmed_at
-        self.store.save_run(run)
-        self._cancel_deliveries_for_run(run.id, confirmed_at, "confirmed")
-
-        if run.origin_run_id:
-            origin = self.store.get_run(run.origin_run_id)
-            if origin is not None:
-                origin.status = RunStatus.SUCCEEDED
-                origin.confirmed_at = confirmed_at
-                origin.finished_at = confirmed_at
-                origin.result = {**origin.result, "confirmed_by_follow_up": run.id}
-                self.store.save_run(origin)
-                self._cancel_deliveries_for_run(origin.id, confirmed_at, "confirmed_by_follow_up")
-            self._cancel_follow_ups_for_origin(
-                run.origin_run_id,
-                confirmed_at,
-                "confirmed_by_follow_up",
-                exclude_run_id=run.id,
-            )
-        else:
-            self._cancel_follow_ups_for_origin(
-                run.id,
-                confirmed_at,
-                "confirmed_by_origin",
-            )
-        return run
+        return self.lifecycle.confirm_success(
+            run,
+            confirmed_at,
+            delivery_reason="confirmed",
+        )
 
     def confirm_latest_run(self, task_id: str, now: datetime | None = None) -> Run | None:
         """确认某任务最近一次待确认主运行记录。"""
@@ -167,44 +158,13 @@ class XushiService:
         run = self.store.get_run(run_id)
         if run is None:
             return None
-        finished_at = callback.finished_at or datetime.now(tz=UTC)
-        run.status = RunStatus(callback.status)
-        run.result = {**run.result, **callback.result}
-        run.error = callback.error
-        run.finished_at = finished_at
-        if callback.status == RunStatus.SUCCEEDED:
-            run.confirmed_at = finished_at
-        self.store.save_run(run)
-        if callback.status == RunStatus.SUCCEEDED:
-            self._cancel_deliveries_for_run(run.id, finished_at, "callback_succeeded")
-
-        if run.origin_run_id and callback.status == RunStatus.SUCCEEDED:
-            origin = self.store.get_run(run.origin_run_id)
-            if origin is not None:
-                origin.status = RunStatus.SUCCEEDED
-                origin.confirmed_at = finished_at
-                origin.finished_at = finished_at
-                origin.result = {**origin.result, "confirmed_by_follow_up": run.id}
-                self.store.save_run(origin)
-                self._cancel_deliveries_for_run(origin.id, finished_at, "confirmed_by_follow_up")
-            self._cancel_follow_ups_for_origin(
-                run.origin_run_id,
-                finished_at,
-                "confirmed_by_follow_up",
-                exclude_run_id=run.id,
-            )
-        elif callback.status == RunStatus.SUCCEEDED:
-            self._cancel_follow_ups_for_origin(
-                run.id,
-                finished_at,
-                "confirmed_by_origin",
-            )
-        return run
+        return self.lifecycle.apply_callback(run, callback)
 
     def tick(self, now: datetime | None = None) -> list[Run]:
         """扫描并触发到期任务。"""
         current = now or datetime.now(tz=UTC)
-        self.process_deliveries(current)
+        started = perf_counter()
+        processed_deliveries = self.process_deliveries(current)
         created: list[Run] = []
         for task in self.store.list_active_tasks():
             last_run = self._last_primary_run_for_task(task.id)
@@ -217,7 +177,17 @@ class XushiService:
                 last_completed_at,
             ):
                 created.append(self.trigger_task(task.id, now=scheduled_for))
-        created.extend(self.process_follow_ups(current))
+        follow_ups = self.process_follow_ups(current)
+        created.extend(follow_ups)
+        auto_retries = self._auto_retry_failed_deliveries(current)
+        self.metrics.record_tick(
+            at=current.isoformat(),
+            duration_ms=(perf_counter() - started) * 1000,
+            processed_deliveries=len(processed_deliveries),
+            created_runs=len(created),
+            created_follow_ups=len(follow_ups),
+            auto_retries=len(auto_retries),
+        )
         return created
 
     def process_deliveries(self, now: datetime | None = None) -> list[Delivery]:
@@ -308,6 +278,8 @@ class XushiService:
                 follow_up_attempts=attempts + 1,
             )
             self.store.save_run(follow_up_run)
+            self.metrics.increment("runs_created_total")
+            self.metrics.increment("follow_up_created_total")
             action = self._action_for_run(task, follow_up_run, kind="follow_up")
             delivery = self._create_delivery(
                 task,
@@ -368,6 +340,8 @@ class XushiService:
             self.settings,
             quiet_policy=settings.quiet_policy,
             executors=settings.executors,
+            auto_retry_failed_deliveries=settings.auto_retry_failed_deliveries,
+            auto_retry_max_attempts=settings.auto_retry_max_attempts,
         )
         self.quiet_policy = QuietPolicyEngine(
             settings.quiet_policy,
@@ -377,32 +351,38 @@ class XushiService:
             executor.id: executor for executor in settings.executors if executor.enabled
         }
         return {
-            "reloaded": ["executors", "quiet_policy"],
+            "reloaded": ["executors", "quiet_policy", "auto_retry_policy"],
             "restart_required": [
                 "api_token",
                 "database_path",
                 "host",
                 "port",
                 "scheduler_interval_seconds",
+                "sqlite_journal_mode",
+                "sqlite_synchronous",
             ],
             "executors": len(settings.executors),
             "enabled_executors": len(self._executor_map),
             "quiet_policy_enabled": settings.quiet_policy.enabled,
+            "auto_retry_failed_deliveries": settings.auto_retry_failed_deliveries,
+            "auto_retry_max_attempts": settings.auto_retry_max_attempts,
         }
 
     def list_notifications(self) -> list[NotificationEvent]:
         """列出通知事件。"""
         return self.store.list_notifications()
 
-    def list_deliveries(self) -> list[Delivery]:
+    def list_deliveries(self, *, limit: int | None = None) -> list[Delivery]:
         """列出投递计划。"""
-        return self.store.list_deliveries()
+        return self.store.list_deliveries(limit=limit)
 
     def retry_failed_deliveries(
         self,
         now: datetime | None = None,
         *,
         limit: int | None = None,
+        automatic: bool = False,
+        max_attempts: int | None = None,
     ) -> list[Delivery]:
         """为仍需投递的失败 delivery 创建一次新的投递尝试。"""
         current = now or datetime.now(tz=UTC)
@@ -410,13 +390,27 @@ class XushiService:
         for delivery in self.store.list_deliveries(statuses={DeliveryStatus.FAILED.value}):
             if limit is not None and len(created) >= limit:
                 break
-            if not self._failed_delivery_can_retry(delivery):
+            if not self._failed_delivery_can_retry(
+                delivery,
+                automatic=automatic,
+                max_attempts=max_attempts,
+            ):
                 continue
-            created.append(self._create_retry_delivery(delivery, current))
+            created.append(
+                self._create_retry_delivery(
+                    delivery,
+                    current,
+                    automatic=automatic,
+                )
+            )
 
         if created:
             self.process_deliveries(current)
         return [self.store.get_delivery(delivery.id) or delivery for delivery in created]
+
+    def metrics_snapshot(self) -> dict[str, object]:
+        """返回当前进程内的运行指标。"""
+        return self.metrics.snapshot()
 
     def _get_executor(self, executor_id: str) -> Executor | None:
         """按 ID 获取启用的 executor 配置。"""
@@ -498,6 +492,7 @@ class XushiService:
             "deliver_at": delivery.deliver_at.isoformat(),
         }
         self.store.save_run(run)
+        self.metrics.record_delivery_status(str(delivery.status))
         return self.store.save_delivery(delivery)
 
     def _complete_prevented_delivery(
@@ -541,6 +536,7 @@ class XushiService:
         delivery.error = result.get("error")
         delivery.updated_at = current
         self.store.save_delivery(delivery)
+        self.metrics.record_delivery_status(str(delivery.status))
 
         notification_id = result.get("notification_id")
         if notification_id:
@@ -603,6 +599,7 @@ class XushiService:
             delivery.error = executed.error
             delivery.updated_at = current
             self.store.save_delivery(delivery)
+            self.metrics.record_delivery_status(str(delivery.status))
             result = {
                 **executed.result,
                 "delivered": delivered,
@@ -646,7 +643,13 @@ class XushiService:
         run.error = run.error or result.get("error")
         self.store.save_run(run)
 
-    def _failed_delivery_can_retry(self, delivery: Delivery) -> bool:
+    def _failed_delivery_can_retry(
+        self,
+        delivery: Delivery,
+        *,
+        automatic: bool = False,
+        max_attempts: int | None = None,
+    ) -> bool:
         """判断失败投递是否仍对应一个可重试的 run。"""
         if (
             delivery.status != DeliveryStatus.FAILED
@@ -660,13 +663,34 @@ class XushiService:
             return False
         if run.status in {RunStatus.SUCCEEDED, RunStatus.CANCELLED} or run.confirmed_at:
             return False
+        if automatic and max_attempts is not None:
+            attempts = int(delivery.result.get("auto_retry_attempts", 0))
+            if attempts >= max_attempts:
+                return False
         return run.result.get("delivery_id") == delivery.id
 
-    def _create_retry_delivery(self, delivery: Delivery, current: datetime) -> Delivery:
+    def _create_retry_delivery(
+        self,
+        delivery: Delivery,
+        current: datetime,
+        *,
+        automatic: bool = False,
+    ) -> Delivery:
         """创建新的 delivery，保留原失败记录作为审计历史。"""
         run = self.get_run(str(delivery.run_id))
         if run is None:
             raise KeyError(str(delivery.run_id))
+
+        retry_result: dict[str, object] = {
+            "retry_of": delivery.id,
+            "retry_requested_at": current.isoformat(),
+        }
+        if automatic:
+            retry_result["retry_mode"] = "automatic"
+            retry_result["auto_retry_attempts"] = (
+                int(delivery.result.get("auto_retry_attempts", 0)) + 1
+            )
+            self.metrics.increment("auto_retry_created_total")
 
         retry = Delivery(
             id=f"delivery_{uuid4().hex}",
@@ -678,10 +702,7 @@ class XushiService:
             deliver_at=current,
             status=DeliveryStatus.PENDING,
             reason=delivery.reason,
-            result={
-                "retry_of": delivery.id,
-                "retry_requested_at": current.isoformat(),
-            },
+            result=retry_result,
             created_at=current,
             updated_at=current,
         )
@@ -699,6 +720,19 @@ class XushiService:
         }
         self.store.save_run(run)
         return retry
+
+    def _auto_retry_failed_deliveries(self, current: datetime) -> list[Delivery]:
+        """按配置自动重试失败投递，默认关闭。"""
+        if (
+            not self.settings.auto_retry_failed_deliveries
+            or self.settings.auto_retry_max_attempts <= 0
+        ):
+            return []
+        return self.retry_failed_deliveries(
+            now=current,
+            automatic=True,
+            max_attempts=self.settings.auto_retry_max_attempts,
+        )
 
     def _group_follow_ups_by_origin(self, runs: list[Run]) -> dict[str, list[Run]]:
         grouped: dict[str, list[Run]] = {}

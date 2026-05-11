@@ -253,6 +253,76 @@ def test_confirm_latest_run_endpoint_and_run_filters(tmp_path) -> None:
     assert len(limited_response.json()["data"]) == 1
 
 
+def test_run_list_uses_safe_default_limit(tmp_path) -> None:
+    settings = Settings(database_path=tmp_path / "xushi.db", api_token="test-token")
+    client = TestClient(create_app(settings))
+    create_response = client.post(
+        "/api/v1/tasks",
+        headers={"Authorization": "Bearer test-token"},
+        json={
+            "title": "喝水",
+            "schedule": {
+                "kind": "one_shot",
+                "run_at": datetime(2026, 5, 9, 12, 0, tzinfo=UTC).isoformat(),
+                "timezone": "UTC",
+            },
+            "action": {"type": "reminder", "payload": {"message": "喝水"}},
+        },
+    )
+    task_id = create_response.json()["data"]["id"]
+    for _ in range(105):
+        client.post(
+            f"/api/v1/tasks/{task_id}/runs",
+            headers={"Authorization": "Bearer test-token"},
+        )
+
+    default_response = client.get(
+        "/api/v1/runs",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    expanded_response = client.get(
+        "/api/v1/runs?limit=105",
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert len(default_response.json()["data"]) == 100
+    assert len(expanded_response.json()["data"]) == 105
+
+
+def test_metrics_endpoint_reports_counters_and_recent_ticks(tmp_path) -> None:
+    settings = Settings(database_path=tmp_path / "xushi.db", api_token="test-token")
+    client = TestClient(create_app(settings))
+    create_response = client.post(
+        "/api/v1/tasks",
+        headers={"Authorization": "Bearer test-token"},
+        json={
+            "title": "喝水",
+            "schedule": {
+                "kind": "one_shot",
+                "run_at": datetime(2026, 5, 9, 12, 0, tzinfo=UTC).isoformat(),
+                "timezone": "UTC",
+            },
+            "action": {"type": "reminder", "payload": {"message": "喝水"}},
+        },
+    )
+    task_id = create_response.json()["data"]["id"]
+
+    client.post(
+        f"/api/v1/tasks/{task_id}/runs",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    response = client.get(
+        "/api/v1/metrics",
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["counters"]["runs_created_total"] == 1
+    assert data["counters"]["deliveries_succeeded_total"] == 1
+    assert data["recent_ticks"] == []
+
+
 def test_list_notifications_endpoint(tmp_path) -> None:
     settings = Settings(database_path=tmp_path / "xushi.db", api_token="test-token")
     client = TestClient(create_app(settings))
@@ -423,17 +493,21 @@ def test_config_reload_updates_runtime_executors_and_quiet_policy(tmp_path, monk
     assert before_reload.json()["data"][0]["id"] == "old-openclaw"
     assert reload_response.status_code == 200
     assert reload_response.json()["data"] == {
-        "reloaded": ["executors", "quiet_policy"],
+        "reloaded": ["executors", "quiet_policy", "auto_retry_policy"],
         "restart_required": [
             "api_token",
             "database_path",
             "host",
             "port",
             "scheduler_interval_seconds",
+            "sqlite_journal_mode",
+            "sqlite_synchronous",
         ],
         "executors": 1,
         "enabled_executors": 1,
         "quiet_policy_enabled": True,
+        "auto_retry_failed_deliveries": False,
+        "auto_retry_max_attempts": 1,
     }
     assert after_reload.json()["data"][0]["id"] == "new-openclaw"
     assert new_token_response.status_code == 401

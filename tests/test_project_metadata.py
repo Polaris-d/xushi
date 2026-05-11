@@ -171,6 +171,14 @@ def test_build_workflow_does_not_upload_pyinstaller_spec_files() -> None:
     assert "*.spec" not in build_workflow
 
 
+def test_build_workflow_runs_metadata_consistency_script() -> None:
+    build_workflow = (ROOT / ".github" / "workflows" / "build.yml").read_text(encoding="utf-8")
+    script = ROOT / "scripts" / "check_project_metadata.py"
+
+    assert script.exists()
+    assert "scripts/check_project_metadata.py" in build_workflow
+
+
 def test_github_community_health_files_exist() -> None:
     assert (ROOT / "CONTRIBUTING.md").exists()
     assert (ROOT / "SECURITY.md").exists()

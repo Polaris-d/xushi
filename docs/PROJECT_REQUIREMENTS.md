@@ -20,6 +20,7 @@
 - 支持 `idempotency_key`，保障 agent 重试创建任务时不会重复生成任务；同一幂等键若携带不同请求体，必须返回冲突错误，避免 agent 静默复用错误任务。
 - API 成功和错误响应均使用统一 JSON 结构，方便 agent 稳定解析。
 - 支持 ISO 8601 时间、RRULE、timezone。
+- 支持 ISO 8601 duration 的天、时、分、秒组合，例如 `P1D`、`PT10M`、`P1DT2H`；年月、小数和负数 duration 必须显式拒绝，避免自然月和时区语义歧义。
 - API 中所有具体时间点必须携带时区偏移，例如 `Z` 或 `+08:00`；不带时区的时间一律拒绝，服务端不得猜测默认时区。
 - 任务必须单独标注 IANA 时区，例如 `Asia/Shanghai`；RRULE、工作日策略、免打扰窗口和摘要投递等本地日历语义都必须按该时区或用户配置的时区解释。
 - 支持中国大陆工作日、法定节假日和调休判断；节假日与调休数据必须标注关联节日名称；工作日策略下可将触发时间顺延到下一个中国大陆工作日。
@@ -35,7 +36,7 @@
 - 内置 OpenClaw、Hermes、webhook executor 概念。
 - executor 配置必须存放在本地 `config.json` 的 `executors` 数组中，数据库不保存 executor 配置。
 - 修改 `config.json` 中的 `executors` 或全局 `quiet_policy` 后，必须支持通过显式 reload API 重新加载运行时配置，不要求用户重启 daemon。
-- 显式 reload 不热更新数据库路径、监听地址、端口、API token 和调度间隔；这些启动级配置变更仍要求重启 daemon。
+- 修改自动重试策略后，显式 reload 必须能更新运行时配置；显式 reload 不热更新数据库路径、SQLite PRAGMA、监听地址、端口、API token 和调度间隔，这些启动级配置变更仍要求重启 daemon。
 - OpenClaw executor 默认使用 `mode=hooks_agent` 调用 OpenClaw `/hooks/agent`，让 OpenClaw agent 处理提醒文本并通过 `deliver=true` 投递到聊天渠道。
 - OpenClaw executor 必须支持 `token_env`，避免把 OpenClaw hook token 写入任务或 executor JSON。
 - OpenClaw executor 必须支持 `/hooks/agent` 的可选字段：`name`、`agent_id`、`wake_mode`、`deliver`、`channel`、`to`、`model`、`fallbacks`、`thinking`、`timeout_seconds`。
@@ -73,16 +74,20 @@
 - 提供贡献指南、安全策略、Issue 模板和 PR 模板，降低外部协作成本。
 - daemon 启动后必须自动扫描到期任务和未确认跟进，不能依赖用户手动执行 `tick`。
 - daemon 后台调度循环必须输出可观察的启动日志；有触发或跟进创建时应输出 tick 摘要，避免调度器静默导致 agent 无法判断是否运行。
+- daemon 必须提供本地运行期指标接口，至少包含 run 创建数、delivery 成功/失败/延迟数、跟进创建数、自动重试数和最近 tick 摘要。
 - SQLite 必须保留 JSON payload 的演进弹性，同时把高频查询字段冗余为结构化列并建立索引，用于任务扫描、运行记录确认、delivery 到期投递和幂等键查询。
+- SQLite journal mode 和 synchronous 策略必须可配置，默认保持保守；启用 WAL / NORMAL 时需在文档中说明一致性和性能权衡。
 - 数据库 schema 必须支持就地迁移，旧版本本地库升级后不得因缺少新增列或索引而无法启动。
 - 支持确认运行记录已完成，确认后停止后续跟进提醒。
-- 支持按任务、状态、活跃状态和条数过滤运行记录，便于 agent 找到真正需要处理的 run。
+- 支持按任务、状态、活跃状态和条数过滤运行记录，便于 agent 找到真正需要处理的 run；任务、运行记录和 delivery 列表 API 默认必须有安全条数上限，避免历史数据增长后默认全量返回。
 - 支持按任务确认最近一次待确认主运行记录，避免 agent 先查询大量 run 再手动筛选 run_id。
 - 运行记录确认或任务归档后，关联的待处理跟进记录必须标记为已取消，默认查询和统计不应把它们视为待处理事项。
 - `xushi-skills` 必须明确喝水、起立、伸展、眼休息等健康习惯默认使用 completion anchor，并引导 agent 优先使用全局免打扰策略处理夜间投递，同时记录真实使用中发生的优化反馈草稿。
 - 支持查看通知投递历史，包含系统通知成功、失败和 fallback 记录。
 - 支持查看 delivery 历史，包含 pending、delayed、digested、delivered、failed、skipped、silenced 和 cancelled 状态。
 - 支持在修复 executor token、URL、TLS 或 agent 路由配置后，手动重试仍对应未完成 run 的失败 delivery；重试必须保留原失败 delivery 作为审计历史。
+- 支持可选的失败 delivery 自动重试，默认关闭；开启后必须有最大次数限制，并在 retry delivery 结果中保留原失败记录和自动重试次数。
+- CI 必须检查应用版本、OpenClaw 插件版本以及内置 plugin/skills 副本一致性，避免发布资产错配。
 
 ## 4. v1 任务语义
 
@@ -148,3 +153,4 @@
 | 2026-05-11 | 明确 | 所有 API 具体时间点必须携带时区偏移，并单独保留 IANA 时区用于 RRULE、免打扰和本地日历判断。 |
 | 2026-05-11 | 新增 | 增加显式配置 reload 需求，支持不重启 daemon 更新 executor 和全局免打扰策略。 |
 | 2026-05-11 | 调整 | 增加 SQLite 结构化索引与 schema 迁移要求，并明确同一幂等键不同请求体返回冲突。 |
+| 2026-05-11 | 新增 | 增加运行期指标、有限自动重试、SQLite PRAGMA 配置、列表默认上限和元数据一致性 CI 要求。 |
