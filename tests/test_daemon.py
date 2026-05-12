@@ -4,11 +4,36 @@ from datetime import UTC, datetime
 
 import pytest
 
+import xushi.daemon as daemon
 from xushi.config import Settings
 from xushi.daemon import main
 from xushi.models import Schedule, TaskCreate
 from xushi.runtime import run_scheduler_once
 from xushi.service import XushiService
+
+
+class FakeTextStream:
+    """记录文本流 reconfigure 调用。"""
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, str]] = []
+
+    def reconfigure(self, **kwargs: str) -> None:
+        """模拟 TextIOWrapper.reconfigure。"""
+        self.calls.append(kwargs)
+
+
+def test_daemon_configures_standard_streams_for_utf8_help(monkeypatch) -> None:
+    """daemon help 中包含中文时应使用 UTF-8 输出。"""
+    stdout = FakeTextStream()
+    stderr = FakeTextStream()
+    monkeypatch.setattr(daemon.sys, "stdout", stdout)
+    monkeypatch.setattr(daemon.sys, "stderr", stderr)
+
+    daemon.configure_text_output_encoding()
+
+    assert stdout.calls == [{"encoding": "utf-8", "errors": "replace"}]
+    assert stderr.calls == [{"encoding": "utf-8", "errors": "replace"}]
 
 
 def test_daemon_help_exits_without_starting_server(monkeypatch, capsys) -> None:
