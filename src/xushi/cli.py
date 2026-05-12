@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import socket
+import sys
 from pathlib import Path
 from typing import Annotated, Any
 from urllib import error, request
@@ -30,6 +31,21 @@ from xushi.plugins import bundled_plugin_status, install_bundled_plugin
 from xushi.service import InvalidTaskConfigurationError, XushiService
 from xushi.skills import bundled_skills_status, install_bundled_skills
 from xushi.upgrade import UpgradeError, UpgradeManager, default_bin_dir
+
+
+def configure_text_output_encoding() -> None:
+    """配置文本输出编码, 避免 Windows CI 中中文 help 输出失败。"""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            continue
+
+
+configure_text_output_encoding()
 
 app = typer.Typer(help="序时 xushi 本地日程与 agent 调度工具。")
 upgrade_app = typer.Typer(help="手动安全升级序时。")

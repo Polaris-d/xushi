@@ -84,17 +84,21 @@ jobs:
       - run: uv run --with pyinstaller python scripts/build_binaries.py
       - name: Smoke test binaries
         if: runner.os != 'Windows'
+        timeout-minutes: 2
         run: |
           ./dist/xushi --help
           ./dist/xushi-daemon --help
       - name: Smoke test binaries
         if: runner.os == 'Windows'
+        timeout-minutes: 2
         shell: pwsh
         run: |
+          $PSNativeCommandUseErrorActionPreference = $true
           .\dist\xushi.exe --help
           .\dist\xushi-daemon.exe --help
       - name: Smoke test Linux binaries in Ubuntu 26.04 userland
         if: runner.os == 'Linux'
+        timeout-minutes: 2
         run: |
           docker run --rm \
             -v "$PWD/dist:/dist:ro" \

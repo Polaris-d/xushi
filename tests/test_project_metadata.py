@@ -163,6 +163,10 @@ def test_release_workflow_publishes_tagged_artifacts() -> None:
     assert "ubuntu-22.04" in build_workflow
     assert "Smoke test binaries" in release_workflow
     assert "Smoke test binaries" in build_workflow
+    assert "timeout-minutes: 2" in release_workflow
+    assert "timeout-minutes: 2" in build_workflow
+    assert "$PSNativeCommandUseErrorActionPreference = $true" in release_workflow
+    assert "$PSNativeCommandUseErrorActionPreference = $true" in build_workflow
     assert "ubuntu:26.04" in release_workflow
     assert "--skills" not in build_workflow
     assert "--plugin" not in build_workflow
