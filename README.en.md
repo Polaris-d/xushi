@@ -182,9 +182,9 @@ xushi never upgrades silently. Run upgrades explicitly:
 
 ```powershell
 xushi upgrade status
-xushi upgrade check --version v0.1.9
+xushi upgrade check --version v0.1.10
 xushi upgrade backup
-xushi upgrade apply --version v0.1.9 --yes
+xushi upgrade apply --version v0.1.10 --yes
 xushi upgrade rollback
 ```
 
