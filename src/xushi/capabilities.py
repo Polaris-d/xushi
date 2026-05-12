@@ -83,7 +83,25 @@ CAPABILITIES: tuple[Capability, ...] = (
         "http": {"method": "POST", "path": "/api/v1/tasks/{task_id}/runs", "auth_required": True},
         "cli": {"command": "xushi trigger <task_id>"},
         "openclaw_plugin": {"tool": "xushi_trigger_task"},
-        "notes": ["When the user says a task is done, use confirm_latest_run or confirm_run."],
+        "notes": [
+            "When the user says a task is done, use complete_task, "
+            "confirm_latest_run or confirm_run."
+        ],
+    },
+    {
+        "id": "complete_task",
+        "purpose": (
+            "用户说明某任务已完成时, 按任务记录完成。若已有未完成主 run 则确认它; "
+            "若 completion anchor 循环任务尚未到点, 则创建不投递的手动完成锚点。"
+        ),
+        "http": {
+            "method": "POST",
+            "path": "/api/v1/tasks/{task_id}/complete",
+            "auth_required": True,
+        },
+        "cli": {"command": "xushi complete <task_id>"},
+        "openclaw_plugin": {"tool": "xushi_complete_task"},
+        "notes": ["Preferred when the user may have completed the task before the next reminder."],
     },
     {
         "id": "list_runs",

@@ -59,7 +59,7 @@ curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scr
 安装指定版本：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_VERSION=v0.1.12 sh
+curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_VERSION=v0.1.13 sh
 ```
 
 序时优先适配 OpenClaw 和 Hermes。安装后建议优先配置 `plugins/openclaw-xushi` 插件、OpenClaw `/hooks/agent` executor，或 Hermes agent webhook，把提醒投递回 agent 和聊天渠道。
@@ -99,9 +99,9 @@ irm https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/in
 | 能力 | 状态 | 说明 |
 | --- | --- | --- |
 | Python daemon | 可用 | FastAPI + SQLite，本地调度与 API |
-| CLI | 可用 | `capabilities`、`init`、`doctor`、`create`、`list`、`get`、`update`、`delete`、`trigger`、`runs`、`confirm`、`confirm-latest`、`callback`、`tick`、`executors`、`reload-config`、`notifications`、`deliveries`、`retry-deliveries`、`plugins`、`skills`、`upgrade` |
+| CLI | 可用 | `capabilities`、`init`、`doctor`、`create`、`list`、`get`、`update`、`delete`、`trigger`、`complete`、`runs`、`confirm`、`confirm-latest`、`callback`、`tick`、`executors`、`reload-config`、`notifications`、`deliveries`、`retry-deliveries`、`plugins`、`skills`、`upgrade` |
 | Web 管理台 | 可用 | 访问 daemon 根路径查看任务、运行记录和通知 |
-| OpenClaw 插件 | 可用 | `plugins/openclaw-xushi`，提供能力发现、创建、查询、更新、归档、触发、运行记录过滤、失败投递重试、最近确认和 callback 工具 |
+| OpenClaw 插件 | 可用 | `plugins/openclaw-xushi`，提供能力发现、创建、查询、更新、归档、触发、按任务记录完成、运行记录过滤、失败投递重试、最近确认和 callback 工具 |
 | xushi-skills | 可用 | `skills/xushi-skills`，帮助 agent 判断任务类型、生成 schema、适当追问并记录本地优化反馈草稿 |
 | OpenClaw executor | 可用 | 投递到 OpenClaw `/hooks/agent` |
 | Hermes executor | 可用 | 可配置 HTTP agent webhook |
@@ -125,7 +125,9 @@ xushi-daemon
 - Agent 能力清单：`http://127.0.0.1:18766/api/v1/capabilities`
 - OpenAPI：`http://127.0.0.1:18766/openapi.json` 或 `http://127.0.0.1:18766/docs`
 
-Agent 只会 HTTP API 时，先读取 `GET /api/v1/capabilities`，再按其中的 `http` 字段调用具体接口；只会 CLI 时，先运行 `xushi capabilities` 或 `xushi --help`。OpenClaw 插件场景下，对应入口是 `xushi_capabilities`。
+Agent 只会 HTTP API 时，先读取 `GET /api/v1/capabilities`，再按其中的 `http` 字段调用具体接口；只会 CLI 时，先运行 `xushi capabilities` 或 `xushi --help`。OpenClaw 插件场景下，对应入口是 `xushi_capabilities`。用户说某任务已经完成时，优先使用 `complete` 能力；它会确认已有未完成主 run，若 completion anchor 循环任务还没到下次提醒时间，则写入不投递提醒的手动完成锚点。
+
+CLI 中对应命令是 `xushi complete <task_id>`，OpenClaw 插件中对应工具是 `xushi_complete_task`，HTTP API 是 `POST /api/v1/tasks/{task_id}/complete`。
 
 本地开发仍然使用 `uv`：
 
@@ -337,7 +339,14 @@ GET /api/v1/metrics
 Authorization: Bearer <XUSHI_API_TOKEN>
 ```
 
-当用户已经说明某个任务完成，且 agent 已知道 `task_id` 时，可以直接确认该任务最近一次待确认主运行记录：
+当用户已经说明某个任务完成，且 agent 已知道 `task_id` 时，优先使用按任务完成入口。它不会触发新提醒；如果已有未完成主 run，会直接确认该 run；如果 completion anchor 循环任务还没到下一次提醒时间，会创建一条不投递提醒的手动完成锚点：
+
+```http
+POST /api/v1/tasks/{task_id}/complete
+Authorization: Bearer <XUSHI_API_TOKEN>
+```
+
+如果只需要确认该任务最近一次待确认主运行记录，也可以使用窄口径确认接口：
 
 ```http
 POST /api/v1/tasks/{task_id}/runs/confirm-latest
@@ -381,8 +390,8 @@ uv build --wheel
 发布正式版本时创建并推送 SemVer tag：
 
 ```powershell
-git tag v0.1.12
-git push origin v0.1.12
+git tag v0.1.13
+git push origin v0.1.13
 ```
 
 `.github/workflows/release.yml` 会在 tag 上执行跨平台质量检查，生成 Python wheel/sdist、Windows/macOS/Linux 单文件二进制，并在 GitHub Release 中附带 `SHA256SUMS.txt` 校验和与自动 release notes。OpenClaw 插件随 `xushi` 应用内置安装，也可以另行发布到 ClawHub；GitHub Release 不再提供独立插件 zip。
@@ -391,9 +400,9 @@ git push origin v0.1.12
 
 ```powershell
 xushi upgrade status
-xushi upgrade check --version v0.1.12
+xushi upgrade check --version v0.1.13
 xushi upgrade backup
-xushi upgrade apply --version v0.1.12 --yes
+xushi upgrade apply --version v0.1.13 --yes
 xushi upgrade rollback
 ```
 

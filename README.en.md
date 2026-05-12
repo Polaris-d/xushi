@@ -77,7 +77,7 @@ After installing xushi and configuring an executor, ask the agent to send a real
 | Daily semantics | Supports fixed time, ASAP, windows, deadlines, recurrence, confirmation, and follow-up |
 | Delivery loop | Can deliver reminders to OpenClaw or Hermes through `executor_id` |
 | China calendar | Includes 2026 mainland China holidays and adjusted workdays |
-| Auditable | Every trigger creates a run record with filtered queries, latest-run confirmation, and callbacks |
+| Auditable | Every trigger or manual completion creates a run record with filtered queries, task completion, latest-run confirmation, and callbacks |
 | Distributable | Ships wheels, PyInstaller binaries, Release assets, and an OpenClaw plugin |
 
 ## Quick Start
@@ -96,7 +96,7 @@ Then open:
 - Agent capability map: `http://127.0.0.1:18766/api/v1/capabilities`
 - OpenAPI: `http://127.0.0.1:18766/openapi.json` or `http://127.0.0.1:18766/docs`
 
-HTTP-only agents should first read `GET /api/v1/capabilities`, then call the endpoint listed in each capability's `http` field. CLI-only agents can run `xushi capabilities` or `xushi --help`. OpenClaw plugin users can call `xushi_capabilities`.
+HTTP-only agents should first read `GET /api/v1/capabilities`, then call the endpoint listed in each capability's `http` field. CLI-only agents can run `xushi capabilities` or `xushi --help`. OpenClaw plugin users can call `xushi_capabilities`. When the user says a known task is done, prefer the `complete` capability: `xushi complete <task_id>`, OpenClaw `xushi_complete_task`, or `POST /api/v1/tasks/{task_id}/complete`. It confirms an existing unfinished primary run, or records a non-delivered manual completion anchor when a completion-based recurring task is done before its next reminder.
 
 Local development still uses `uv`:
 
@@ -178,6 +178,11 @@ Authorization: Bearer <XUSHI_API_TOKEN>
 ```
 
 ```http
+POST /api/v1/tasks/{task_id}/complete
+Authorization: Bearer <XUSHI_API_TOKEN>
+```
+
+```http
 POST /api/v1/tasks/{task_id}/runs/confirm-latest
 Authorization: Bearer <XUSHI_API_TOKEN>
 ```
@@ -195,9 +200,9 @@ xushi never upgrades silently. Run upgrades explicitly:
 
 ```powershell
 xushi upgrade status
-xushi upgrade check --version v0.1.12
+xushi upgrade check --version v0.1.13
 xushi upgrade backup
-xushi upgrade apply --version v0.1.12 --yes
+xushi upgrade apply --version v0.1.13 --yes
 xushi upgrade rollback
 ```
 

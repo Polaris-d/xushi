@@ -387,6 +387,18 @@ def trigger(task_id: str) -> None:
     typer.echo(run.model_dump_json(indent=2))
 
 
+@app.command("complete")
+def complete_task(task_id: str) -> None:
+    """按任务记录完成，必要时创建手动完成锚点。"""
+    service = _service()
+    if service.get_task(task_id) is None:
+        raise typer.BadParameter("task not found")
+    run = service.complete_task(task_id)
+    if run is None:
+        raise typer.BadParameter("task has no completable run or completion anchor")
+    typer.echo(run.model_dump_json(indent=2))
+
+
 @app.command("runs")
 def list_runs(
     task_id: Annotated[

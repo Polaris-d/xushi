@@ -47,7 +47,7 @@ Key points:
 - Let normal tasks inherit the user's global `quiet_policy` for night-time delay and digest aggregation.
 - Keep `requires_confirmation: true`.
 - In current xushi versions, `max_attempts: 0` disables follow-up.
-- If the user says they completed the habit, confirm the latest pending run for that task. Do not only reply in chat.
+- If the user says they completed the habit, call the task-level complete operation (`xushi complete <task_id>`, OpenClaw `xushi_complete_task`, or HTTP `POST /api/v1/tasks/{task_id}/complete`). This also handles early completion before the next reminder exists. Do not only reply in chat, and do not use `trigger` as a completion workaround.
 
 Common wrong pattern:
 

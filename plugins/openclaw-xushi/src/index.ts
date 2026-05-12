@@ -173,6 +173,22 @@ export default definePluginEntry({
     });
 
     api.registerTool({
+      name: "xushi_complete_task",
+      description:
+        "按任务记录完成。若已有未完成主 run 则确认它；若 completion anchor 循环任务尚未到点，则创建不投递提醒的手动完成锚点。用户说已完成但可能早于下一次提醒时优先使用它。",
+      parameters: Type.Object({
+        task_id: Type.String({ description: "xushi 任务 ID。" }),
+      }),
+      async execute(_id, params: { task_id: string }) {
+        return textResult(
+          await xushiRequest(config, `/api/v1/tasks/${params.task_id}/complete`, {
+            method: "POST",
+          }),
+        );
+      },
+    });
+
+    api.registerTool({
       name: "xushi_list_runs",
       description:
         "列出 xushi 运行记录。可按 task_id、status、active_only 和 limit 过滤；agent 判断待确认事项时优先用 active_only=true。",

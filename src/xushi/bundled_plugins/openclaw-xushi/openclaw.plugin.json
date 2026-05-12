@@ -2,7 +2,7 @@
   "id": "xushi",
   "name": "序时 xushi",
   "description": "将 OpenClaw 接入本地序时 daemon，用于可靠创建、查询和触发日程任务。",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
@@ -30,6 +30,7 @@
       "xushi_update_task",
       "xushi_delete_task",
       "xushi_trigger_task",
+      "xushi_complete_task",
       "xushi_list_runs",
       "xushi_list_notifications",
       "xushi_list_deliveries",

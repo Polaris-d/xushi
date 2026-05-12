@@ -143,6 +143,9 @@ def test_cli_capabilities_lists_confirm_interfaces() -> None:
     confirm_run = next(item for item in payload["capabilities"] if item["id"] == "confirm_run")
     assert confirm_run["cli"]["command"] == "xushi confirm <run_id>"
     assert confirm_run["http"]["path"] == "/api/v1/runs/{run_id}/confirm"
+    complete_task = next(item for item in payload["capabilities"] if item["id"] == "complete_task")
+    assert complete_task["cli"]["command"] == "xushi complete <task_id>"
+    assert complete_task["http"]["path"] == "/api/v1/tasks/{task_id}/complete"
 
 
 def test_cli_get_update_delete_task(tmp_path, monkeypatch) -> None:
@@ -199,6 +202,34 @@ def test_cli_confirm_run_by_run_id(tmp_path, monkeypatch) -> None:
     payload = json.loads(result.output)
     assert payload["id"] == run.id
     assert payload["status"] == "succeeded"
+
+
+def test_cli_complete_task_creates_manual_completion_anchor(tmp_path, monkeypatch) -> None:
+    database_path = tmp_path / "xushi.db"
+    monkeypatch.setenv("XUSHI_DATABASE_PATH", str(database_path))
+    service = XushiService(Settings(database_path=database_path, api_token="test-token"))
+    task = service.create_task(
+        TaskCreate(
+            title="喝水",
+            schedule=Schedule(
+                kind="recurring",
+                run_at=datetime(2026, 5, 9, 12, 0, tzinfo=UTC),
+                rrule="FREQ=HOURLY;INTERVAL=2",
+                timezone="UTC",
+                anchor="completion",
+            ),
+            action={"type": "reminder", "payload": {"message": "喝水"}},
+            follow_up_policy={"requires_confirmation": True},
+        )
+    )
+
+    result = CliRunner().invoke(app, ["complete", task.id])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["task_id"] == task.id
+    assert payload["status"] == "succeeded"
+    assert payload["result"]["manual_completion"] is True
 
 
 def test_cli_callback_run(tmp_path, monkeypatch) -> None:

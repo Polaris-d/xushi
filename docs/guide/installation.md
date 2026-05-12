@@ -75,7 +75,7 @@ Optional environment variables:
 
 | Variable | Purpose |
 | --- | --- |
-| `XUSHI_VERSION` | Release tag to install, for example `v0.1.12`; default is latest |
+| `XUSHI_VERSION` | Release tag to install, for example `v0.1.13`; default is latest |
 | `XUSHI_BIN_DIR` | Binary install directory; default is `~/.xushi/bin` |
 | `XUSHI_REPO_SLUG` | GitHub repository slug; default is `Polaris-d/xushi` |
 | `XUSHI_INSTALL_AGENT_PLUGINS` | Optional comma-separated auxiliary plugin targets; currently supports `openclaw` |
@@ -356,7 +356,7 @@ xushi capabilities
 curl http://127.0.0.1:18766/api/v1/capabilities
 ```
 
-OpenClaw agents can call `xushi_capabilities`. The capabilities response lists the matching HTTP path, CLI command, and plugin tool for confirmation, run queries, delivery retry, and other common actions.
+OpenClaw agents can call `xushi_capabilities`. The capabilities response lists the matching HTTP path, CLI command, and plugin tool for task completion, confirmation, run queries, delivery retry, and other common actions. If the user says a completion-based habit is already done before the next reminder fires, use the `complete_task` / `xushi complete <task_id>` / `POST /api/v1/tasks/{task_id}/complete` capability instead of `trigger`.
 
 #### 6.2 Send one smoke-test reminder
 
@@ -456,7 +456,7 @@ xushi upgrade apply --yes
 For a specific release tag:
 
 ```bash
-xushi upgrade apply --version v0.1.12 --yes
+xushi upgrade apply --version v0.1.13 --yes
 ```
 
 The upgrade command creates a backup of the local config and SQLite database before replacing global command binaries from GitHub Releases. A successful `upgrade apply` JSON output includes a `post_upgrade_notice` reminding the agent to run the post-upgrade delivery test. If the upgrade fails or the user wants to restore data, run:

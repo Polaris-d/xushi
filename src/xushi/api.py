@@ -155,6 +155,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         response.status_code = status.HTTP_201_CREATED
         return api_response(run.model_dump(mode="json"), "created", 201)
 
+    @app.post(
+        "/api/v1/tasks/{task_id}/complete",
+        dependencies=[Depends(require_token)],
+        summary="Complete a task",
+        description=(
+            "Record task completion. If a primary run is waiting, confirm it. "
+            "If no run exists yet for a completion-anchored recurring task, create "
+            "a manual completion anchor without sending a reminder."
+        ),
+    )
+    def complete_task(task_id: str) -> dict[str, Any]:
+        if service.get_task(task_id) is None:
+            raise HTTPException(status_code=404, detail="task not found")
+        run = service.complete_task(task_id)
+        if run is None:
+            raise HTTPException(
+                status_code=409,
+                detail="task has no completable run or completion anchor",
+            )
+        return api_response(run.model_dump(mode="json"))
+
     @app.get("/api/v1/runs", dependencies=[Depends(require_token)])
     def list_runs(
         task_id: str | None = None,

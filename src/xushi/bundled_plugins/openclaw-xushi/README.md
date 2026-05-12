@@ -12,6 +12,7 @@
 - `xushi_update_task`：部分更新任务。
 - `xushi_delete_task`：归档任务并取消仍打开的运行记录。
 - `xushi_trigger_task`：手动触发任务。
+- `xushi_complete_task`：按任务记录完成；可在下一次提醒到点前为 completion anchor 循环任务创建手动完成锚点。
 - `xushi_list_runs`：列出运行记录，支持按任务、状态、活跃状态和条数过滤。
 - `xushi_list_notifications`：列出本地通知记录。
 - `xushi_list_deliveries`：列出投递计划，查看提醒是否被免打扰延迟、聚合、跳过或投递。
@@ -56,7 +57,7 @@ OpenClaw config 可覆盖：
 }
 ```
 
-如果 daemon 未启动或 token 未配置，先运行 `xushi_install_hint` 查看当前插件读取的地址和 token 环境变量名。若 agent 不确定应该用哪个工具，先运行 `xushi_capabilities`；它与 HTTP `GET /api/v1/capabilities` 和 CLI `xushi capabilities` 返回同一套能力清单。
+如果 daemon 未启动或 token 未配置，先运行 `xushi_install_hint` 查看当前插件读取的地址和 token 环境变量名。若 agent 不确定应该用哪个工具，先运行 `xushi_capabilities`；它与 HTTP `GET /api/v1/capabilities` 和 CLI `xushi capabilities` 返回同一套能力清单。用户说某任务完成时优先用 `xushi_complete_task`；它会先确认已有未完成主 run，若 completion anchor 循环任务还没到下次提醒时间，则写入不投递提醒的手动完成锚点。`xushi_trigger_task` 只用于测试或立即执行，不用于完成确认。
 
 ## 提醒投递到 Agent
 
