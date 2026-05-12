@@ -134,6 +134,103 @@ def test_cli_retry_deliveries_requeues_failed_delivery(tmp_path, monkeypatch) ->
     assert payload[0]["result"]["retry_of"] == failed_delivery.id
 
 
+def test_cli_capabilities_lists_confirm_interfaces() -> None:
+    result = CliRunner().invoke(app, ["capabilities"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["entrypoints"]["http"]["capabilities"] == "GET /api/v1/capabilities"
+    confirm_run = next(item for item in payload["capabilities"] if item["id"] == "confirm_run")
+    assert confirm_run["cli"]["command"] == "xushi confirm <run_id>"
+    assert confirm_run["http"]["path"] == "/api/v1/runs/{run_id}/confirm"
+
+
+def test_cli_get_update_delete_task(tmp_path, monkeypatch) -> None:
+    database_path = tmp_path / "xushi.db"
+    monkeypatch.setenv("XUSHI_DATABASE_PATH", str(database_path))
+    service = XushiService(Settings(database_path=database_path, api_token="test-token"))
+    task = service.create_task(
+        TaskCreate(
+            title="喝水",
+            schedule=Schedule(
+                kind="one_shot",
+                run_at=datetime(2026, 5, 9, 12, 0, tzinfo=UTC),
+                timezone="UTC",
+            ),
+            action={"type": "reminder", "payload": {"message": "喝水"}},
+        )
+    )
+    patch_file = tmp_path / "patch.json"
+    patch_file.write_text(json.dumps({"title": "喝温水"}), encoding="utf-8")
+
+    get_result = CliRunner().invoke(app, ["get", task.id])
+    update_result = CliRunner().invoke(app, ["update", task.id, str(patch_file)])
+    delete_result = CliRunner().invoke(app, ["delete", task.id])
+
+    assert get_result.exit_code == 0
+    assert json.loads(get_result.output)["id"] == task.id
+    assert update_result.exit_code == 0
+    assert json.loads(update_result.output)["title"] == "喝温水"
+    assert delete_result.exit_code == 0
+    assert json.loads(delete_result.output)["status"] == "archived"
+
+
+def test_cli_confirm_run_by_run_id(tmp_path, monkeypatch) -> None:
+    database_path = tmp_path / "xushi.db"
+    monkeypatch.setenv("XUSHI_DATABASE_PATH", str(database_path))
+    service = XushiService(Settings(database_path=database_path, api_token="test-token"))
+    task = service.create_task(
+        TaskCreate(
+            title="喝水",
+            schedule=Schedule(
+                kind="one_shot",
+                run_at=datetime(2026, 5, 9, 12, 0, tzinfo=UTC),
+                timezone="UTC",
+            ),
+            action={"type": "reminder", "payload": {"message": "喝水"}},
+            follow_up_policy={"requires_confirmation": True},
+        )
+    )
+    run = service.trigger_task(task.id, now=datetime(2026, 5, 9, 12, 0, tzinfo=UTC))
+
+    result = CliRunner().invoke(app, ["confirm", run.id])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["id"] == run.id
+    assert payload["status"] == "succeeded"
+
+
+def test_cli_callback_run(tmp_path, monkeypatch) -> None:
+    database_path = tmp_path / "xushi.db"
+    monkeypatch.setenv("XUSHI_DATABASE_PATH", str(database_path))
+    service = XushiService(Settings(database_path=database_path, api_token="test-token"))
+    task = service.create_task(
+        TaskCreate(
+            title="生成日报",
+            schedule=Schedule(
+                kind="one_shot",
+                run_at=datetime(2026, 5, 9, 12, 0, tzinfo=UTC),
+                timezone="UTC",
+            ),
+            action={"type": "agent", "payload": {"message": "生成日报"}},
+        )
+    )
+    run = service.trigger_task(task.id, now=datetime(2026, 5, 9, 12, 0, tzinfo=UTC))
+    result_file = tmp_path / "result.json"
+    result_file.write_text(json.dumps({"summary": "已完成"}), encoding="utf-8")
+
+    result = CliRunner().invoke(
+        app,
+        ["callback", run.id, "--status", "succeeded", "--result-file", str(result_file)],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["status"] == "succeeded"
+    assert payload["result"]["summary"] == "已完成"
+
+
 def test_cli_reload_config_posts_to_running_daemon(tmp_path, monkeypatch) -> None:
     config_path = tmp_path / "config.json"
     config_path.write_text(

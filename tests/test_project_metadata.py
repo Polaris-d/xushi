@@ -21,6 +21,10 @@ def test_readme_has_github_friendly_install_entrypoints() -> None:
     assert "scripts/install.sh" in readme
     assert "强烈推荐开启" in readme
     assert "测试提醒" in readme
+    assert "安装或升级完成后" in readme
+    assert "每次安装或升级后都必须做一次真实投递测试" in readme
+    assert "GET /api/v1/capabilities" in readme
+    assert "xushi capabilities" in readme
 
 
 def test_license_is_mit_for_open_source_distribution() -> None:
@@ -48,6 +52,8 @@ def test_installation_guide_is_agent_readable() -> None:
     assert "strongly recommended" in guide
     assert "是否同时安装 OpenClaw 插件和 xushi-skills" in guide
     assert "Run an interactive delivery check" in guide
+    assert "after every new installation and after every upgrade" in guide
+    assert "After every upgrade, repeat the same interactive delivery check" in guide
     assert "我刚刚发送了一条序时测试提醒" in guide
     assert "Common mistakes to avoid" in guide
     assert "action.executor_id" in guide
@@ -123,9 +129,13 @@ def test_openclaw_plugin_does_not_mutate_executor_configuration() -> None:
         encoding="utf-8"
     )
 
+    assert "xushi_capabilities" in manifest
     assert "xushi_list_executors" in manifest
     assert "xushi_reload_config" in manifest
     assert "xushi_reload_config" in source
+    assert "xushi_update_task" in manifest
+    assert "xushi_delete_task" in manifest
+    assert "xushi_list_notifications" in manifest
     assert "xushi_list_runs" in manifest
     assert "xushi_confirm_latest_run" in manifest
     assert "xushi_save_executor" not in manifest
@@ -234,6 +244,10 @@ def test_xushi_skills_include_agent_task_type_guidance() -> None:
     assert "Prefer OpenClaw and Hermes integration paths" in skill
     assert "anchor: \"completion\"" in skill
     assert "confirming the latest pending run" in skill
+    assert "GET /api/v1/capabilities" in skill
+    assert "POST /api/v1/tasks/{task_id}/runs/confirm-latest" in skill
+    assert "xushi confirm <run_id>" in skill
+    assert "After every installation, upgrade, or executor reconfiguration" in skill
     assert "喝水" in task_types
     assert "起立" in task_types
     assert "deadline" in task_types

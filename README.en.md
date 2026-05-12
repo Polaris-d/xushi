@@ -38,7 +38,7 @@ Install and configure xushi by following the instructions here:
 https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/docs/guide/installation.md
 ```
 
-The agent will read the guide, check the local environment, download xushi from GitHub Releases, initialize a local token, and tell you how to start `xushi-daemon`. Before installation, the agent should ask whether to install `xushi-skills`; this is strongly recommended because it helps OpenClaw/Hermes understand task types, quiet policy, and confirmation flows. After configuration, the agent should send a test reminder and wait for you to confirm that the target channel received it.
+The agent will read the guide, check the local environment, download xushi from GitHub Releases, initialize a local token, and tell you how to start `xushi-daemon`. Before installation, the agent should ask whether to install `xushi-skills`; this is strongly recommended because it helps OpenClaw/Hermes understand task types, quiet policy, and confirmation flows. After every installation or upgrade, the agent must send a real test reminder and wait for you to confirm that the target channel received it.
 
 ## Direct Install
 
@@ -66,7 +66,7 @@ curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scr
 
 If your OpenClaw or Hermes skills directory is customized, set `XUSHI_OPENCLAW_SKILLS_DIR` / `XUSHI_HERMES_SKILLS_DIR` to the skills root. The installer also honors existing `OPENCLAW_SKILLS_DIR` / `HERMES_SKILLS_DIR` variables.
 
-After installing xushi and configuring an executor, ask the agent to send a real test reminder and confirm with the user that the message arrived in OpenClaw, Hermes, or the target chat channel. `xushi doctor` proves the local config is readable; the test reminder proves the delivery path works.
+After installing xushi and configuring an executor, ask the agent to send a real test reminder and confirm with the user that the message arrived in OpenClaw, Hermes, or the target chat channel. After upgrading, run the same delivery test again to verify that the new binary, plugin, skills, daemon, and executor route still match. `xushi doctor` proves the local config is readable; the test reminder proves the delivery path works.
 
 ## Why xushi
 
@@ -93,6 +93,10 @@ Then open:
 
 - Web console: `http://127.0.0.1:18766/`
 - Health check: `http://127.0.0.1:18766/api/v1/health`
+- Agent capability map: `http://127.0.0.1:18766/api/v1/capabilities`
+- OpenAPI: `http://127.0.0.1:18766/openapi.json` or `http://127.0.0.1:18766/docs`
+
+HTTP-only agents should first read `GET /api/v1/capabilities`, then call the endpoint listed in each capability's `http` field. CLI-only agents can run `xushi capabilities` or `xushi --help`. OpenClaw plugin users can call `xushi_capabilities`.
 
 Local development still uses `uv`:
 
@@ -162,7 +166,11 @@ xushi reload-config
 xushi retry-deliveries
 ```
 
-Useful run APIs for agents:
+Useful discovery and run APIs for agents:
+
+```http
+GET /api/v1/capabilities
+```
 
 ```http
 GET /api/v1/runs?task_id=<task_id>&active_only=true&limit=10
@@ -174,6 +182,11 @@ POST /api/v1/tasks/{task_id}/runs/confirm-latest
 Authorization: Bearer <XUSHI_API_TOKEN>
 ```
 
+```http
+POST /api/v1/runs/{run_id}/confirm
+Authorization: Bearer <XUSHI_API_TOKEN>
+```
+
 ## Release And Upgrade
 
 Tagged releases publish Python packages, Windows/macOS/Linux single-file binaries, checksums, and generated release notes. The OpenClaw plugin is bundled with the xushi app and can also be published to ClawHub; GitHub Releases no longer attach a standalone plugin zip.
@@ -182,9 +195,9 @@ xushi never upgrades silently. Run upgrades explicitly:
 
 ```powershell
 xushi upgrade status
-xushi upgrade check --version v0.1.11
+xushi upgrade check --version v0.1.12
 xushi upgrade backup
-xushi upgrade apply --version v0.1.11 --yes
+xushi upgrade apply --version v0.1.12 --yes
 xushi upgrade rollback
 ```
 
@@ -198,6 +211,8 @@ xushi plugins install openclaw
 xushi skills status
 xushi skills install --targets openclaw,hermes
 ```
+
+After every install or upgrade, run a real delivery test before calling the work complete: run `xushi doctor`, make sure `xushi-daemon` is using the new version and expected config, create one unique smoke-test reminder, and ask the user to confirm receipt in the daily target channel. A successful upgrade command or `doctor` output is not enough by itself.
 
 ## Checks
 

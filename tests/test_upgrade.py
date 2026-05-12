@@ -5,7 +5,7 @@ import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
-from xushi.upgrade import UpgradeManager
+from xushi.upgrade import POST_UPGRADE_NOTICE, UpgradeManager
 
 
 def _write_database(database_path: Path, value: str) -> None:
@@ -92,6 +92,8 @@ def test_upgrade_apply_creates_backup_before_downloading_release_assets(tmp_path
     result = manager.apply(target_version="v0.1.2", allow_running_daemon=True)
 
     assert result.status == "succeeded"
+    assert result.to_json()["post_upgrade_notice"] == POST_UPGRADE_NOTICE
+    assert "测试提醒" in result.to_json()["post_upgrade_notice"]
     assert (tmp_path / "backups" / result.backup_id / "xushi.db").exists()
     assert (install_dir / "xushi").exists()
     assert (install_dir / "xushi-daemon").exists()

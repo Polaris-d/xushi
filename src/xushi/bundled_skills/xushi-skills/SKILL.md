@@ -35,6 +35,16 @@ Use this skill to operate xushi as an agent-facing local scheduler. Prefer it wh
 7. When the user later says the work is done, confirm the relevant run instead of only replying conversationally. If the task id is known, prefer confirming the latest pending run for that task before listing all runs.
 8. If real xushi usage exposes a product issue, confusing behavior, missing guide, or recurring workaround, record a local optimization note. Do not upload or send it unless the user asks.
 
+## Interface Map
+
+- If unsure which integration surface is available, discover capabilities first: OpenClaw plugin `xushi_capabilities`, CLI `xushi capabilities`, or HTTP `GET /api/v1/capabilities`. Raw HTTP agents can also inspect `GET /openapi.json` or `/docs`.
+- Create task: plugin `xushi_create_task`; CLI `xushi create <task.json>`; HTTP `POST /api/v1/tasks`.
+- List active/pending runs: plugin `xushi_list_runs` with `active_only=true`; CLI `xushi runs --active-only --limit 10`; HTTP `GET /api/v1/runs?active_only=true&limit=10`.
+- User says a known task is done: plugin `xushi_confirm_latest_run`; CLI `xushi confirm-latest <task_id>`; HTTP `POST /api/v1/tasks/{task_id}/runs/confirm-latest`. This confirms completion and must not create a new reminder.
+- User says a known run is done: plugin `xushi_confirm_run`; CLI `xushi confirm <run_id>`; HTTP `POST /api/v1/runs/{run_id}/confirm`.
+- Manual trigger is only for testing or immediate execution: plugin `xushi_trigger_task`; CLI `xushi trigger <task_id>`; HTTP `POST /api/v1/tasks/{task_id}/runs`. Do not use trigger as a completion confirmation.
+- After fixing executor config: plugin `xushi_reload_config` then `xushi_retry_deliveries`; CLI `xushi reload-config` then `xushi retry-deliveries`; HTTP `POST /api/v1/config/reload` then `POST /api/v1/deliveries/retry`.
+
 ## Integration Setup Checks
 
 - Before installing agent add-ons, ask the user whether to install the OpenClaw plugin and `xushi-skills`. Strongly recommend yes for OpenClaw/Hermes users, then use installer parameters for non-interactive installation.
@@ -42,7 +52,8 @@ Use this skill to operate xushi as an agent-facing local scheduler. Prefer it wh
 - After changing `~/.xushi/config.json` executors, global `quiet_policy`, or auto-retry policy, call `xushi_reload_config` from the OpenClaw plugin, run `xushi reload-config`, or `POST /api/v1/config/reload` to refresh the daemon without restarting. Restart `xushi-daemon` for API token, database path, SQLite PRAGMA, host, port, scheduler interval, or daemon-side environment variable changes.
 - For OpenClaw TLS, match the URL scheme to the Gateway. HTTPS Gateway needs `https://...`; local self-signed HTTPS also needs `"insecure_tls": true`.
 - For OpenClaw routing, set `agent_id` when the reminder must reach a specific working agent. If it is missing, OpenClaw may use its default agent/session.
-- After configuration, create one unique smoke-test reminder with `action.executor_id` set, then ask the user whether the target channel received it.
+- After every installation, upgrade, or executor reconfiguration, create one unique smoke-test reminder with `action.executor_id` set, then ask the user whether the target channel received it. Do not call install or upgrade complete until the user confirms receipt.
+- After upgrading, sync bundled plugin/skills when they were installed before, restart or reload the daemon as needed, then run the same smoke test because the binary, plugin, skills, daemon process, and executor config must still match.
 - If a delivery failed before the configuration was fixed, reload config or restart as needed, then use `xushi_retry_deliveries` from the OpenClaw plugin or `xushi retry-deliveries` from the shell.
 - Use `GET /api/v1/metrics` when you need to confirm the daemon is ticking, creating runs, delivering notifications, or retrying failures. Remember metrics are in-memory and reset when the daemon restarts.
 

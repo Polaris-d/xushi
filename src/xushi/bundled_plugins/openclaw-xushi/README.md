@@ -4,12 +4,16 @@
 
 ## 工具
 
+- `xushi_capabilities`：列出当前 daemon 暴露的 HTTP API、CLI 命令和插件工具。
 - `xushi_health`：检查 daemon 是否在线。
 - `xushi_create_task`：创建结构化任务。
 - `xushi_list_tasks`：列出任务。
 - `xushi_get_task`：查看任务。
+- `xushi_update_task`：部分更新任务。
+- `xushi_delete_task`：归档任务并取消仍打开的运行记录。
 - `xushi_trigger_task`：手动触发任务。
 - `xushi_list_runs`：列出运行记录，支持按任务、状态、活跃状态和条数过滤。
+- `xushi_list_notifications`：列出本地通知记录。
 - `xushi_list_deliveries`：列出投递计划，查看提醒是否被免打扰延迟、聚合、跳过或投递。
 - `xushi_retry_deliveries`：重试仍需要投递的失败记录。
 - `xushi_reload_config`：显式重新加载 daemon 的 executor 和全局免打扰配置。
@@ -52,7 +56,7 @@ OpenClaw config 可覆盖：
 }
 ```
 
-如果 daemon 未启动或 token 未配置，先运行 `xushi_install_hint` 查看当前插件读取的地址和 token 环境变量名。
+如果 daemon 未启动或 token 未配置，先运行 `xushi_install_hint` 查看当前插件读取的地址和 token 环境变量名。若 agent 不确定应该用哪个工具，先运行 `xushi_capabilities`；它与 HTTP `GET /api/v1/capabilities` 和 CLI `xushi capabilities` 返回同一套能力清单。
 
 ## 提醒投递到 Agent
 

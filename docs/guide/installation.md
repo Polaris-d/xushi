@@ -29,7 +29,7 @@ You are helping the user install and configure xushi, a local-first scheduler fo
 
 ### Step 0: Explain what will happen
 
-Tell the user that xushi will be installed from GitHub Releases into `~/.xushi/bin`, configured as a global command, initialized with a local API token, and verified with `xushi doctor`. The daemon listens on `127.0.0.1` by default.
+Tell the user that xushi will be installed from GitHub Releases into `~/.xushi/bin`, configured as a global command, initialized with a local API token, and verified with `xushi doctor` plus a real test reminder. The daemon listens on `127.0.0.1` by default.
 
 Also make the integration priority explicit: xushi prioritizes OpenClaw and Hermes. The normal path is installing xushi, then configuring the OpenClaw plugin and `/hooks/agent` executor or the Hermes agent webhook.
 
@@ -75,7 +75,7 @@ Optional environment variables:
 
 | Variable | Purpose |
 | --- | --- |
-| `XUSHI_VERSION` | Release tag to install, for example `v0.1.11`; default is latest |
+| `XUSHI_VERSION` | Release tag to install, for example `v0.1.12`; default is latest |
 | `XUSHI_BIN_DIR` | Binary install directory; default is `~/.xushi/bin` |
 | `XUSHI_REPO_SLUG` | GitHub repository slug; default is `Polaris-d/xushi` |
 | `XUSHI_INSTALL_AGENT_PLUGINS` | Optional comma-separated auxiliary plugin targets; currently supports `openclaw` |
@@ -337,7 +337,7 @@ If the output still shows old values, the daemon probably read a different confi
 
 ### Step 6: Run an interactive delivery check
 
-Configuration is not complete until the user confirms that a real test message can be delivered through the same path they will use in daily life.
+Configuration is not complete until the user confirms that a real test message can be delivered through the same path they will use in daily life. Run this check after every new installation and after every upgrade; do not treat `xushi doctor`, a successful installer, or a successful upgrade command as enough by itself.
 
 #### 6.1 Confirm daemon and plugin connectivity
 
@@ -348,6 +348,15 @@ curl http://127.0.0.1:18766/api/v1/health
 ```
 
 If health fails, fix daemon startup, host, port, or network reachability before creating any task.
+
+If the agent is unsure which operations are available, discover the surface first:
+
+```bash
+xushi capabilities
+curl http://127.0.0.1:18766/api/v1/capabilities
+```
+
+OpenClaw agents can call `xushi_capabilities`. The capabilities response lists the matching HTTP path, CLI command, and plugin tool for confirmation, run queries, delivery retry, and other common actions.
 
 #### 6.2 Send one smoke-test reminder
 
@@ -366,7 +375,7 @@ With OpenClaw plugin tools, call `xushi_create_task` with this shape:
     "type": "reminder",
     "executor_id": "openclaw",
     "payload": {
-      "message": "这是一条序时安装后的投递测试。如果你看到它，请告诉 agent 已收到。"
+      "message": "这是一条序时安装或升级后的投递测试。如果你看到它，请告诉 agent 已收到。"
     }
   },
   "follow_up_policy": {
@@ -447,10 +456,10 @@ xushi upgrade apply --yes
 For a specific release tag:
 
 ```bash
-xushi upgrade apply --version v0.1.11 --yes
+xushi upgrade apply --version v0.1.12 --yes
 ```
 
-The upgrade command creates a backup of the local config and SQLite database before replacing global command binaries from GitHub Releases. If the upgrade fails or the user wants to restore data, run:
+The upgrade command creates a backup of the local config and SQLite database before replacing global command binaries from GitHub Releases. A successful `upgrade apply` JSON output includes a `post_upgrade_notice` reminding the agent to run the post-upgrade delivery test. If the upgrade fails or the user wants to restore data, run:
 
 ```bash
 xushi upgrade rollback
@@ -464,3 +473,12 @@ xushi plugins install openclaw
 xushi skills status
 xushi skills install --targets openclaw,hermes
 ```
+
+After every upgrade, repeat the same interactive delivery check from Step 6. At minimum:
+
+```bash
+xushi doctor
+xushi capabilities
+```
+
+Then ensure `xushi-daemon` is running the upgraded binary and using the expected config, create one unique smoke-test reminder through the same delivery path the user uses daily, and ask the user to confirm receipt. If the reminder fails, debug by layer with `xushi runs --active-only --limit 10`, `xushi deliveries`, `xushi notifications`, and `GET /api/v1/metrics`. Do not call the upgrade complete until the user confirms the test reminder arrived.

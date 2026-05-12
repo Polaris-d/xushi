@@ -106,6 +106,24 @@ def test_api_returns_unified_not_found_error(tmp_path) -> None:
     }
 
 
+def test_capabilities_endpoint_is_public_and_agent_readable(tmp_path) -> None:
+    settings = Settings(database_path=tmp_path / "xushi.db", api_token="test-token")
+    client = TestClient(create_app(settings))
+
+    response = client.get("/api/v1/capabilities")
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["entrypoints"]["http"]["openapi"] == "GET /openapi.json"
+    assert payload["entrypoints"]["cli"]["capabilities"] == "xushi capabilities"
+    confirm_latest = next(
+        item for item in payload["capabilities"] if item["id"] == "confirm_latest_run"
+    )
+    assert confirm_latest["http"]["path"] == "/api/v1/tasks/{task_id}/runs/confirm-latest"
+    assert confirm_latest["cli"]["command"] == "xushi confirm-latest <task_id>"
+    assert confirm_latest["openclaw_plugin"]["tool"] == "xushi_confirm_latest_run"
+
+
 def test_create_task_rejects_naive_datetime(tmp_path) -> None:
     settings = Settings(database_path=tmp_path / "xushi.db", api_token="test-token")
     client = TestClient(create_app(settings))
