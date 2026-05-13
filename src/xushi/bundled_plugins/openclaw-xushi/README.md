@@ -12,7 +12,7 @@
 - `xushi_list_runs`：列出运行记录，支持按任务、状态、活跃状态和条数过滤。
 - `xushi_list_deliveries`：列出投递计划，查看提醒是否被免打扰延迟、聚合、跳过或投递。
 - `xushi_retry_deliveries`：重试仍需要投递的失败记录。
-- `xushi_reload_config`：显式重新加载 daemon 的 executor 和全局免打扰配置。
+- `xushi_reload_config`：显式重新加载 daemon 的 executor、全局免打扰、提醒聚合和自动重试配置。
 - `xushi_confirm_run`：确认运行记录已完成，停止后续跟进。
 - `xushi_confirm_latest_run`：确认某任务最近一次待确认主运行记录。
 - `xushi_callback_run`：提交长任务最终结果。
@@ -56,7 +56,7 @@ OpenClaw config 可覆盖：
 
 ## 提醒投递到 Agent
 
-序时 daemon 不能自动调用 OpenClaw 插件本身。要让提醒进入 OpenClaw/飞书等 agent 渠道，请把 OpenClaw hooks agent executor 写入 `~/.xushi/config.json` 的 `executors` 数组，然后调用 `xushi_reload_config` 或 `xushi reload-config` 让运行中的 daemon 重新加载。只有修改 daemon 进程环境变量、API token、数据库路径、监听端口或调度间隔时才需要重启 daemon：
+序时 daemon 不能自动调用 OpenClaw 插件本身。要让提醒进入 OpenClaw/飞书等 agent 渠道，请把 OpenClaw hooks agent executor 写入 `~/.xushi/config.json` 的 `executors` 数组，然后调用 `xushi_reload_config` 或 `xushi reload-config` 让运行中的 daemon 重新加载。修改全局 `quiet_policy`、`reminder_aggregation` 或自动重试配置也只需要 reload；只有修改 daemon 进程环境变量、API token、数据库路径、监听端口或调度间隔时才需要重启 daemon：
 
 ```json
 {

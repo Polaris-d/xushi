@@ -102,11 +102,11 @@ uv run xushi init --show-token
 uv run xushi-daemon
 ```
 
-Completion-based habits should keep `anchor: "completion"`. Night-time behavior belongs to the delivery layer: configure a global `quiet_policy` with `behavior: "delay"` and digest aggregation, then let normal tasks inherit it. Use task-level `quiet_policy: {"mode": "bypass"}` only for explicit night reminders such as early flights.
+Completion-based habits should keep `anchor: "completion"`. Night-time behavior belongs to the delivery layer: configure a global `quiet_policy` with `behavior: "delay"` and digest aggregation, then let normal tasks inherit it. The `reminder_aggregation` config also combines ordinary same-minute reminders going to the same destination into one digest. Use task-level `quiet_policy: {"mode": "bypass"}` only for explicit night reminders such as early flights; expiry-sensitive tasks such as ticket buying are not aggregated.
 
 ## Agent Executors
 
-Executors are local config, not task data. Put them in the `executors` array in `~/.xushi/config.json`. After changing `executors` or the global `quiet_policy`, run `xushi reload-config`, call the OpenClaw tool `xushi_reload_config`, or POST `/api/v1/config/reload` to refresh the running daemon. API token, database path, host, port, scheduler interval, and daemon-side environment variable changes still require restarting `xushi-daemon`.
+Executors are local config, not task data. Put them in the `executors` array in `~/.xushi/config.json`. After changing `executors`, the global `quiet_policy`, `reminder_aggregation`, or auto-retry policy, run `xushi reload-config`, call the OpenClaw tool `xushi_reload_config`, or POST `/api/v1/config/reload` to refresh the running daemon. API token, database path, host, port, scheduler interval, and daemon-side environment variable changes still require restarting `xushi-daemon`.
 
 OpenClaw:
 
@@ -182,9 +182,9 @@ xushi never upgrades silently. Run upgrades explicitly:
 
 ```powershell
 xushi upgrade status
-xushi upgrade check --version v0.1.11
+xushi upgrade check --version v0.1.12
 xushi upgrade backup
-xushi upgrade apply --version v0.1.11 --yes
+xushi upgrade apply --version v0.1.12 --yes
 xushi upgrade rollback
 ```
 

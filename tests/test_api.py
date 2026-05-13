@@ -562,7 +562,12 @@ def test_config_reload_updates_runtime_executors_and_quiet_policy(tmp_path, monk
     assert before_reload.json()["data"][0]["id"] == "old-openclaw"
     assert reload_response.status_code == 200
     assert reload_response.json()["data"] == {
-        "reloaded": ["executors", "quiet_policy", "auto_retry_policy"],
+        "reloaded": [
+            "executors",
+            "quiet_policy",
+            "reminder_aggregation",
+            "auto_retry_policy",
+        ],
         "restart_required": [
             "api_token",
             "database_path",
@@ -575,6 +580,7 @@ def test_config_reload_updates_runtime_executors_and_quiet_policy(tmp_path, monk
         "executors": 1,
         "enabled_executors": 1,
         "quiet_policy_enabled": True,
+        "reminder_aggregation_enabled": True,
         "auto_retry_failed_deliveries": False,
         "auto_retry_max_attempts": 1,
     }

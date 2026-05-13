@@ -188,7 +188,7 @@ export default definePluginEntry({
     api.registerTool({
       name: "xushi_reload_config",
       description:
-        "显式重新加载 xushi config.json 中的 executors 和全局 quiet_policy。API token、数据库路径、监听端口和调度间隔仍需要重启 daemon。",
+        "显式重新加载 xushi config.json 中的 executors、全局 quiet_policy、reminder_aggregation 和自动重试策略。API token、数据库路径、监听端口和调度间隔仍需要重启 daemon。",
       parameters: Type.Object({}),
       async execute() {
         return textResult(

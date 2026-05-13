@@ -61,7 +61,7 @@ curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scr
 安装指定版本：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_VERSION=v0.1.11 sh
+curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_VERSION=v0.1.12 sh
 ```
 
 序时优先适配 OpenClaw 和 Hermes。安装后建议优先配置 `plugins/openclaw-xushi` 插件、OpenClaw `/hooks/agent` executor，或 Hermes agent webhook，把提醒投递回 agent 和聊天渠道。
@@ -189,6 +189,13 @@ uv run xushi-daemon
     ],
     "behavior": "delay",
     "aggregation": {"enabled": true, "mode": "digest", "max_items": 10}
+  },
+  "reminder_aggregation": {
+    "enabled": true,
+    "window_seconds": 60,
+    "min_items": 2,
+    "max_items": 10,
+    "include_pending": true
   }
 }
 ```
@@ -221,11 +228,13 @@ uv run xushi-daemon
 }
 ```
 
+`reminder_aggregation` 会把同一分钟、同一投递目的地的多条普通提醒合并成一条摘要。配置了短 `expiry` 的抢票/抢购类任务，或任务级 `quiet_policy: {"mode": "bypass"}` 的提醒，不会参与普通聚合。
+
 如果某个任务必须在免打扰时段提醒，例如凌晨赶飞机，可以在任务上设置 `quiet_policy: {"mode": "bypass"}`。
 
 ## 配置 Agent Executor
 
-Executor 不存入 SQLite，也不能通过 API 写入；请在 `~/.xushi/config.json` 的 `executors` 数组中配置。修改 `executors`、全局 `quiet_policy` 或自动重试策略后，调用 `xushi reload-config`、OpenClaw 工具 `xushi_reload_config`，或 `POST /api/v1/config/reload` 即可让运行中的 daemon 重新加载。修改 API token、数据库路径、SQLite PRAGMA、监听地址、端口、调度间隔或 daemon 进程环境变量时仍需重启 `xushi-daemon`。
+Executor 不存入 SQLite，也不能通过 API 写入；请在 `~/.xushi/config.json` 的 `executors` 数组中配置。修改 `executors`、全局 `quiet_policy`、`reminder_aggregation` 或自动重试策略后，调用 `xushi reload-config`、OpenClaw 工具 `xushi_reload_config`，或 `POST /api/v1/config/reload` 即可让运行中的 daemon 重新加载。修改 API token、数据库路径、SQLite PRAGMA、监听地址、端口、调度间隔或 daemon 进程环境变量时仍需重启 `xushi-daemon`。
 
 ### OpenClaw
 
@@ -364,8 +373,8 @@ uv build --wheel
 发布正式版本时创建并推送 SemVer tag：
 
 ```powershell
-git tag v0.1.11
-git push origin v0.1.11
+git tag v0.1.12
+git push origin v0.1.12
 ```
 
 `.github/workflows/release.yml` 会在 tag 上执行跨平台质量检查，生成 Python wheel/sdist、Windows/macOS/Linux 单文件二进制，并在 GitHub Release 中附带 `SHA256SUMS.txt` 校验和与自动 release notes。OpenClaw 插件随 `xushi` 应用内置安装，也可以另行发布到 ClawHub；GitHub Release 不再提供独立插件 zip。
@@ -374,9 +383,9 @@ git push origin v0.1.11
 
 ```powershell
 xushi upgrade status
-xushi upgrade check --version v0.1.11
+xushi upgrade check --version v0.1.12
 xushi upgrade backup
-xushi upgrade apply --version v0.1.11 --yes
+xushi upgrade apply --version v0.1.12 --yes
 xushi upgrade rollback
 ```
 

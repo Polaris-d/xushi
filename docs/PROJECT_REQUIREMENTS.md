@@ -30,13 +30,14 @@
 - 支持用户级全局免打扰策略，允许多个时间窗口，并支持 `everyday`、`workdays`、`weekends`、`weekdays` 生效规则；`workdays` 必须复用中国大陆工作日和调休判断。
 - 支持任务级免打扰策略，默认继承用户级策略；任务可显式覆盖、绕过、跳过或静默处理免打扰。
 - 免打扰默认行为为 `delay`，即延迟投递而不是丢弃任务；免打扰结束后的延迟提醒默认聚合为摘要，避免消息轰炸。
+- 支持普通提醒的同分钟轻量聚合：同一投递目的地、同一投递类型且同一批到期的多条提醒可合并为一条摘要，减少消息打扰；显式绕过免打扰、配置短 `expiry` 的时效敏感任务不得参与普通聚合。
 - 支持“至少触发一次”的可靠性语义。
 - 错过触发时默认只补偿最近一次。
 - 每次触发生成可审计运行记录。
 - agent/聊天渠道优先通知：提醒任务配置 `executor_id` 时必须通过对应 executor 投递；未配置 executor 的 reminder 仅使用本地系统通知和 Web 管理台记录。
 - 内置 OpenClaw、Hermes、webhook executor 概念。
 - executor 配置必须存放在本地 `config.json` 的 `executors` 数组中，数据库不保存 executor 配置。
-- 修改 `config.json` 中的 `executors` 或全局 `quiet_policy` 后，必须支持通过显式 reload API 重新加载运行时配置，不要求用户重启 daemon。
+- 修改 `config.json` 中的 `executors`、全局 `quiet_policy` 或 `reminder_aggregation` 后，必须支持通过显式 reload API 重新加载运行时配置，不要求用户重启 daemon。
 - 修改自动重试策略后，显式 reload 必须能更新运行时配置；显式 reload 不热更新数据库路径、SQLite PRAGMA、监听地址、端口、API token 和调度间隔，这些启动级配置变更仍要求重启 daemon。
 - OpenClaw executor 默认使用 `mode=hooks_agent` 调用 OpenClaw `/hooks/agent`，让 OpenClaw agent 处理提醒文本并通过 `deliver=true` 投递到聊天渠道。
 - OpenClaw executor 必须支持 `token_env`，避免把 OpenClaw hook token 写入任务或 executor JSON。
@@ -159,3 +160,4 @@
 | 2026-05-11 | 明确 | `completion` anchor 必须依赖确认时间，禁止从无确认终态运行记录迁移出隐式锚点。 |
 | 2026-05-11 | 明确 | 发布二进制必须固定稳定 Python 构建版本并执行启动 smoke test。 |
 | 2026-05-12 | 更正 | 明确发布 smoke test 必须短超时且能捕获 Windows 原生命令非零退出，避免二进制帮助命令或 daemon 常驻导致发布挂起。 |
+| 2026-05-14 | 新增 | 增加普通提醒同分钟轻量聚合需求，并明确绕过和短时效任务不参与聚合。 |

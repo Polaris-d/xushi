@@ -162,7 +162,14 @@ def test_cli_reload_config_posts_to_running_daemon(tmp_path, monkeypatch) -> Non
                     "status": 200,
                     "code": 200,
                     "message": "ok",
-                    "data": {"reloaded": ["executors", "quiet_policy"]},
+                    "data": {
+                        "reloaded": [
+                            "executors",
+                            "quiet_policy",
+                            "reminder_aggregation",
+                            "auto_retry_policy",
+                        ]
+                    },
                     "errors": [],
                 }
             ).encode("utf-8")
@@ -184,7 +191,12 @@ def test_cli_reload_config_posts_to_running_daemon(tmp_path, monkeypatch) -> Non
             10,
         )
     ]
-    assert json.loads(result.output)["data"]["reloaded"] == ["executors", "quiet_policy"]
+    assert json.loads(result.output)["data"]["reloaded"] == [
+        "executors",
+        "quiet_policy",
+        "reminder_aggregation",
+        "auto_retry_policy",
+    ]
 
 
 def test_cli_reload_config_does_not_validate_runtime_config_before_request(

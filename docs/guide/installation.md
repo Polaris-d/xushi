@@ -75,7 +75,7 @@ Optional environment variables:
 
 | Variable | Purpose |
 | --- | --- |
-| `XUSHI_VERSION` | Release tag to install, for example `v0.1.11`; default is latest |
+| `XUSHI_VERSION` | Release tag to install, for example `v0.1.12`; default is latest |
 | `XUSHI_BIN_DIR` | Binary install directory; default is `~/.xushi/bin` |
 | `XUSHI_REPO_SLUG` | GitHub repository slug; default is `Polaris-d/xushi` |
 | `XUSHI_INSTALL_AGENT_PLUGINS` | Optional comma-separated auxiliary plugin targets; currently supports `openclaw` |
@@ -309,7 +309,7 @@ Check these details before testing:
 
 #### 5.6 Reload or restart and verify what xushi actually loaded
 
-After editing `~/.xushi/config.json` executors, global `quiet_policy`, or auto-retry policy, explicitly reload the running daemon:
+After editing `~/.xushi/config.json` executors, global `quiet_policy`, `reminder_aggregation`, or auto-retry policy, explicitly reload the running daemon:
 
 ```bash
 xushi reload-config
@@ -418,7 +418,7 @@ Read the result by layer:
 - Local notification appears instead of OpenClaw/Hermes: `action.executor_id` was missing or did not exactly match an enabled executor id.
 - Repeated smoke tests reuse an old task: add a unique title or `idempotency_key` for each setup attempt.
 
-Fix the failing layer, reload config for executor, global quiet-policy, or auto-retry changes, restart `xushi-daemon` for environment or startup-level changes, then retry the failed delivery or send one new smoke-test reminder:
+Fix the failing layer, reload config for executor, global quiet-policy, reminder aggregation, or auto-retry changes, restart `xushi-daemon` for environment or startup-level changes, then retry the failed delivery or send one new smoke-test reminder:
 
 ```bash
 xushi reload-config
@@ -447,7 +447,7 @@ xushi upgrade apply --yes
 For a specific release tag:
 
 ```bash
-xushi upgrade apply --version v0.1.11 --yes
+xushi upgrade apply --version v0.1.12 --yes
 ```
 
 The upgrade command creates a backup of the local config and SQLite database before replacing global command binaries from GitHub Releases. If the upgrade fails or the user wants to restore data, run:

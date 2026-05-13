@@ -138,11 +138,16 @@ class QuietPolicyEngine:
         return base + timedelta(minutes=end)
 
 
-def summarize_deliveries(items: list[tuple[str, datetime]], max_items: int) -> str:
-    """生成免打扰延迟提醒摘要。"""
+def summarize_deliveries(
+    items: list[tuple[str, datetime]],
+    max_items: int,
+    *,
+    intro: str | None = None,
+) -> str:
+    """生成提醒摘要。"""
     visible = items[:max_items]
     lines = [
-        f"免打扰期间有 {len(items)} 条提醒被延后, 已为你合并成这一条摘要.",
+        intro or f"免打扰期间有 {len(items)} 条提醒被延后, 已为你合并成这一条摘要.",
         "需要关注的事项:",
     ]
     for title, due_at in visible:

@@ -721,6 +721,108 @@ def test_quiet_policy_aggregates_delayed_deliveries(tmp_path) -> None:
     assert len(service.list_notifications()) == 1
 
 
+def test_same_minute_pending_reminders_are_aggregated(tmp_path) -> None:
+    shanghai = get_tzinfo("Asia/Shanghai")
+    service = XushiService(Settings(database_path=tmp_path / "xushi.db", api_token="test-token"))
+    for title in ["喝水", "起立活动"]:
+        service.create_task(
+            TaskCreate(
+                title=title,
+                schedule=Schedule(
+                    kind="one_shot",
+                    run_at=datetime(2026, 5, 9, 9, 0, tzinfo=shanghai),
+                    timezone="Asia/Shanghai",
+                ),
+                action={"type": "reminder", "payload": {"message": title}},
+                follow_up_policy=FollowUpPolicy(requires_confirmation=True),
+            )
+        )
+
+    runs = service.tick(now=datetime(2026, 5, 9, 9, 0, tzinfo=shanghai))
+
+    deliveries = service.list_deliveries()
+    digest_deliveries = [delivery for delivery in deliveries if delivery.kind == "digest"]
+    reminder_deliveries = [delivery for delivery in deliveries if delivery.kind == "reminder"]
+    stored_runs = [service.get_run(run.id) for run in runs]
+    assert len(runs) == 2
+    assert len(digest_deliveries) == 1
+    assert digest_deliveries[0].status == "delivered"
+    assert digest_deliveries[0].action.payload["kind"] == "same_minute_digest"
+    assert {delivery.status for delivery in reminder_deliveries} == {"digested"}
+    assert all(run is not None and run.status == "pending_confirmation" for run in stored_runs)
+    assert len(service.list_notifications()) == 1
+
+
+def test_bypass_reminder_is_not_same_minute_aggregated(tmp_path) -> None:
+    shanghai = get_tzinfo("Asia/Shanghai")
+    service = XushiService(Settings(database_path=tmp_path / "xushi.db", api_token="test-token"))
+    service.create_task(
+        TaskCreate(
+            title="喝水",
+            schedule=Schedule(
+                kind="one_shot",
+                run_at=datetime(2026, 5, 9, 9, 0, tzinfo=shanghai),
+                timezone="Asia/Shanghai",
+            ),
+            action={"type": "reminder", "payload": {"message": "喝水"}},
+        )
+    )
+    service.create_task(
+        TaskCreate(
+            title="凌晨赶飞机",
+            schedule=Schedule(
+                kind="one_shot",
+                run_at=datetime(2026, 5, 9, 9, 0, tzinfo=shanghai),
+                timezone="Asia/Shanghai",
+            ),
+            action={"type": "reminder", "payload": {"message": "去机场"}},
+            quiet_policy=TaskQuietPolicy(mode="bypass"),
+        )
+    )
+
+    service.tick(now=datetime(2026, 5, 9, 9, 0, tzinfo=shanghai))
+
+    deliveries = service.list_deliveries()
+    assert [delivery.status for delivery in deliveries] == ["delivered", "delivered"]
+    assert [delivery.kind for delivery in deliveries] == ["reminder", "reminder"]
+    assert len(service.list_notifications()) == 2
+
+
+def test_expiry_sensitive_reminder_is_not_same_minute_aggregated(tmp_path) -> None:
+    shanghai = get_tzinfo("Asia/Shanghai")
+    service = XushiService(Settings(database_path=tmp_path / "xushi.db", api_token="test-token"))
+    service.create_task(
+        TaskCreate(
+            title="普通提醒",
+            schedule=Schedule(
+                kind="one_shot",
+                run_at=datetime(2026, 5, 9, 9, 0, tzinfo=shanghai),
+                timezone="Asia/Shanghai",
+            ),
+            action={"type": "reminder", "payload": {"message": "普通提醒"}},
+        )
+    )
+    service.create_task(
+        TaskCreate(
+            title="抢票",
+            schedule=Schedule(
+                kind="one_shot",
+                run_at=datetime(2026, 5, 9, 9, 0, tzinfo=shanghai),
+                timezone="Asia/Shanghai",
+                expiry="PT30S",
+            ),
+            action={"type": "reminder", "payload": {"message": "抢票"}},
+        )
+    )
+
+    service.tick(now=datetime(2026, 5, 9, 9, 0, tzinfo=shanghai))
+
+    deliveries = service.list_deliveries()
+    assert [delivery.status for delivery in deliveries] == ["delivered", "delivered"]
+    assert [delivery.kind for delivery in deliveries] == ["reminder", "reminder"]
+    assert len(service.list_notifications()) == 2
+
+
 def test_quiet_policy_can_apply_only_on_workdays(tmp_path) -> None:
     shanghai = get_tzinfo("Asia/Shanghai")
     service = XushiService(
@@ -1036,7 +1138,7 @@ def test_tick_records_runtime_metrics(tmp_path) -> None:
     assert metrics["counters"]["runs_created_total"] == 1
     assert metrics["counters"]["deliveries_succeeded_total"] == 1
     assert latest_tick["created_runs"] == 1
-    assert latest_tick["processed_deliveries"] == 0
+    assert latest_tick["processed_deliveries"] == 1
     assert latest_tick["created_follow_ups"] == 0
     assert latest_tick["duration_ms"] >= 0
 
