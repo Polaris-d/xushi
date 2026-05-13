@@ -29,6 +29,16 @@ def main() -> int:
         errors.append("openclaw.plugin.json version does not match pyproject.toml")
     if package["version"] != app_version:
         errors.append("package.json version does not match pyproject.toml")
+    if package.get("dependencies"):
+        errors.append("OpenClaw bundled plugin must not declare runtime dependencies")
+    plugin_source = (
+        ROOT / "plugins" / "openclaw-xushi" / "src" / "index.ts"
+    ).read_text(encoding="utf-8")
+    plugin_runtime = (
+        ROOT / "plugins" / "openclaw-xushi" / "dist" / "index.js"
+    ).read_text(encoding="utf-8")
+    if "@sinclair/typebox" in plugin_source or "@sinclair/typebox" in plugin_runtime:
+        errors.append("OpenClaw plugin runtime must not import @sinclair/typebox")
     if f'__version__ = "{app_version}"' not in (
         ROOT / "src" / "xushi" / "__init__.py"
     ).read_text(encoding="utf-8"):

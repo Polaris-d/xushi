@@ -1,9 +1,59 @@
-import { Type } from "@sinclair/typebox";
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 
 const DEFAULT_BASE_URL = "http://127.0.0.1:18766";
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+const optionalSchema = Symbol("optionalSchema");
+type JsonSchema = Record<string, unknown> & { [optionalSchema]?: true };
+
+function cleanSchema(schema: JsonSchema): JsonSchema {
+  const clone: JsonSchema = { ...schema };
+  delete clone[optionalSchema];
+  return clone;
+}
+
+// OpenClaw 安装器只复制插件目录，不执行 npm install，因此运行时 schema 保持零外部依赖。
+const Type = {
+  Any(): JsonSchema {
+    return {};
+  },
+  Boolean(options: JsonSchema = {}): JsonSchema {
+    return { type: "boolean", ...options };
+  },
+  Literal(value: boolean | number | string | null): JsonSchema {
+    return { const: value };
+  },
+  Number(options: JsonSchema = {}): JsonSchema {
+    return { type: "number", ...options };
+  },
+  Object(properties: Record<string, JsonSchema>, options: JsonSchema = {}): JsonSchema {
+    const entries = Object.entries(properties);
+    const required = entries
+      .filter(([, schema]) => !schema[optionalSchema])
+      .map(([name]) => name);
+    const normalizedProperties = Object.fromEntries(
+      entries.map(([name, schema]) => [name, cleanSchema(schema)]),
+    );
+    return {
+      type: "object",
+      properties: normalizedProperties,
+      ...(required.length ? { required } : {}),
+      ...options,
+    };
+  },
+  Optional(schema: JsonSchema): JsonSchema {
+    return { ...schema, [optionalSchema]: true };
+  },
+  Record(_keySchema: JsonSchema, valueSchema: JsonSchema, options: JsonSchema = {}): JsonSchema {
+    return { type: "object", additionalProperties: cleanSchema(valueSchema), ...options };
+  },
+  String(options: JsonSchema = {}): JsonSchema {
+    return { type: "string", ...options };
+  },
+  Union(schemas: JsonSchema[]): JsonSchema {
+    return { anyOf: schemas.map((schema) => cleanSchema(schema)) };
+  },
+};
 
 interface XushiConfig {
   baseUrl?: string;

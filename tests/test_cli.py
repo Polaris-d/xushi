@@ -447,6 +447,14 @@ def test_cli_installs_bundled_openclaw_plugin(tmp_path) -> None:
     assert result.exit_code == 0
     assert (plugins_dir / "openclaw-xushi" / "openclaw.plugin.json").exists()
     assert (plugins_dir / "openclaw-xushi" / "dist" / "index.js").exists()
+    package = json.loads(
+        (plugins_dir / "openclaw-xushi" / "package.json").read_text(encoding="utf-8")
+    )
+    runtime = (plugins_dir / "openclaw-xushi" / "dist" / "index.js").read_text(
+        encoding="utf-8"
+    )
+    assert package.get("dependencies", {}) == {}
+    assert "@sinclair/typebox" not in runtime
     assert "bundled" in result.output
 
 
