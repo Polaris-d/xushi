@@ -59,7 +59,7 @@ curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scr
 安装指定版本：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_VERSION=v0.1.14 sh
+curl -fsSL https://raw.githubusercontent.com/Polaris-d/xushi/refs/heads/main/scripts/install.sh | XUSHI_VERSION=v0.1.15 sh
 ```
 
 序时优先适配 OpenClaw 和 Hermes。安装后建议优先配置 `plugins/openclaw-xushi` 插件、OpenClaw `/hooks/agent` executor，或 Hermes agent webhook，把提醒投递回 agent 和聊天渠道。
@@ -399,8 +399,8 @@ uv build --wheel
 发布正式版本时创建并推送 SemVer tag：
 
 ```powershell
-git tag v0.1.14
-git push origin v0.1.14
+git tag v0.1.15
+git push origin v0.1.15
 ```
 
 `.github/workflows/release.yml` 会在 tag 上执行跨平台质量检查，生成 Python wheel/sdist、Windows/macOS/Linux 单文件二进制，并在 GitHub Release 中附带 `SHA256SUMS.txt` 校验和与自动 release notes。OpenClaw 插件随 `xushi` 应用内置安装，也可以另行发布到 ClawHub；GitHub Release 不再提供独立插件 zip。
@@ -409,9 +409,9 @@ git push origin v0.1.14
 
 ```powershell
 xushi upgrade status
-xushi upgrade check --version v0.1.14
+xushi upgrade check --version v0.1.15
 xushi upgrade backup
-xushi upgrade apply --version v0.1.14 --yes
+xushi upgrade apply --version v0.1.15 --yes
 xushi upgrade rollback
 ```
 

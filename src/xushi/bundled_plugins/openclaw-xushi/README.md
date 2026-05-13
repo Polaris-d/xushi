@@ -2,6 +2,8 @@
 
 本插件把 OpenClaw 连接到本机 `xushi-daemon`，让 agent 可以创建、查询和触发结构化日程任务。
 
+插件通过 `xushi plugins install openclaw` 复制内置目录安装，不需要额外执行 `npm install`；运行入口只依赖 OpenClaw 宿主提供的 plugin SDK。
+
 ## 工具
 
 - `xushi_capabilities`：列出当前 daemon 暴露的 HTTP API、CLI 命令和插件工具。

@@ -307,6 +307,22 @@ def test_openclaw_plugin_version_matches_app_and_bundled_copy() -> None:
     assert package["version"] == app_version
 
 
+def test_bundled_openclaw_plugin_has_no_runtime_dependencies() -> None:
+    package = json.loads(
+        (ROOT / "plugins" / "openclaw-xushi" / "package.json").read_text(encoding="utf-8")
+    )
+    source = (ROOT / "plugins" / "openclaw-xushi" / "src" / "index.ts").read_text(
+        encoding="utf-8"
+    )
+    runtime = (ROOT / "plugins" / "openclaw-xushi" / "dist" / "index.js").read_text(
+        encoding="utf-8"
+    )
+
+    assert package.get("dependencies", {}) == {}
+    assert "@sinclair/typebox" not in source
+    assert "@sinclair/typebox" not in runtime
+
+
 def test_bundled_openclaw_plugin_matches_repository_copy() -> None:
     source_root = ROOT / "plugins" / "openclaw-xushi"
     bundled_root = ROOT / "src" / "xushi" / "bundled_plugins" / "openclaw-xushi"

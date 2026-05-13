@@ -1,7 +1,57 @@
-import { Type } from "@sinclair/typebox";
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 
 const DEFAULT_BASE_URL = "http://127.0.0.1:18766";
+
+const optionalSchema = Symbol("optionalSchema");
+
+function cleanSchema(schema) {
+  const clone = { ...schema };
+  delete clone[optionalSchema];
+  return clone;
+}
+
+// OpenClaw 安装器只复制插件目录，不执行 npm install，因此运行时 schema 保持零外部依赖。
+const Type = {
+  Any() {
+    return {};
+  },
+  Boolean(options = {}) {
+    return { type: "boolean", ...options };
+  },
+  Literal(value) {
+    return { const: value };
+  },
+  Number(options = {}) {
+    return { type: "number", ...options };
+  },
+  Object(properties, options = {}) {
+    const entries = Object.entries(properties);
+    const required = entries
+      .filter(([, schema]) => !schema[optionalSchema])
+      .map(([name]) => name);
+    const normalizedProperties = Object.fromEntries(
+      entries.map(([name, schema]) => [name, cleanSchema(schema)]),
+    );
+    return {
+      type: "object",
+      properties: normalizedProperties,
+      ...(required.length ? { required } : {}),
+      ...options,
+    };
+  },
+  Optional(schema) {
+    return { ...schema, [optionalSchema]: true };
+  },
+  Record(_keySchema, valueSchema, options = {}) {
+    return { type: "object", additionalProperties: cleanSchema(valueSchema), ...options };
+  },
+  String(options = {}) {
+    return { type: "string", ...options };
+  },
+  Union(schemas) {
+    return { anyOf: schemas.map((schema) => cleanSchema(schema)) };
+  },
+};
 
 function textResult(value) {
   return { content: [{ type: "text", text: JSON.stringify(value, null, 2) }] };
