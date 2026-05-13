@@ -34,6 +34,11 @@ ACTIVE_RUN_STATUSES = {
     RunStatus.PENDING_CONFIRMATION.value,
     RunStatus.FOLLOWING_UP.value,
 }
+COMPLETABLE_PRIMARY_RUN_STATUSES = {
+    RunStatus.PENDING_DELIVERY.value,
+    RunStatus.PENDING_CONFIRMATION.value,
+    RunStatus.FAILED.value,
+}
 DELIVERABLE_STATUSES = {DeliveryStatus.PENDING.value, DeliveryStatus.DELAYED.value}
 
 
@@ -167,6 +172,45 @@ class XushiService:
         if latest is None:
             return None
         return self.confirm_run(latest.id, now)
+
+    def complete_task(self, task_id: str, now: datetime | None = None) -> Run | None:
+        """按任务记录完成，必要时为完成锚点创建手动 run。"""
+        task = self.get_task(task_id)
+        if task is None:
+            return None
+        if task.status != TaskStatus.ACTIVE:
+            return None
+        completed_at = now or datetime.now(tz=UTC)
+        latest = self.store.latest_unconfirmed_primary_run_for_task(
+            task_id,
+            COMPLETABLE_PRIMARY_RUN_STATUSES,
+        )
+        if latest is not None:
+            return self.lifecycle.confirm_success(
+                latest,
+                completed_at,
+                delivery_reason="task_completed",
+                result_update={"completion_source": "task_complete"},
+            )
+        if not self._uses_completion_anchor(task):
+            return None
+
+        run = Run(
+            id=f"run_{uuid4().hex}",
+            task_id=task.id,
+            scheduled_for=completed_at,
+            started_at=completed_at,
+            finished_at=completed_at,
+            status=RunStatus.SUCCEEDED,
+            confirmed_at=completed_at,
+            result={
+                "manual_completion": True,
+                "completion_source": "task_complete",
+            },
+        )
+        self.store.save_run(run)
+        self.metrics.increment("runs_created_total")
+        return run
 
     def callback_run(self, run_id: str, callback: RunCallback) -> Run | None:
         """根据外部执行器回调更新运行记录。"""
@@ -633,8 +677,8 @@ class XushiService:
         items: list[tuple[str, datetime]] = []
         run_ids: list[str] = []
         for delivery in deliveries:
-            title = str(delivery.action.payload.get("title") or "序时提醒")
-            items.append((title, delivery.due_at))
+            item_title = str(delivery.action.payload.get("title") or "序时提醒")
+            items.append((item_title, delivery.due_at))
             if delivery.run_id:
                 run_ids.append(delivery.run_id)
 

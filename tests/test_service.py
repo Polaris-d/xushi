@@ -747,6 +747,7 @@ def test_same_minute_pending_reminders_are_aggregated(tmp_path) -> None:
     assert len(runs) == 2
     assert len(digest_deliveries) == 1
     assert digest_deliveries[0].status == "delivered"
+    assert digest_deliveries[0].action.payload["title"] == "序时提醒摘要"
     assert digest_deliveries[0].action.payload["kind"] == "same_minute_digest"
     assert {delivery.status for delivery in reminder_deliveries} == {"digested"}
     assert all(run is not None and run.status == "pending_confirmation" for run in stored_runs)
@@ -1014,6 +1015,80 @@ def test_completion_anchor_waits_for_confirmation_before_next_run(tmp_path) -> N
     assert before_completion_interval == []
     assert len(after_completion_interval) == 1
     assert after_completion_interval[0].scheduled_for == datetime(2026, 5, 9, 13, 10, tzinfo=UTC)
+
+
+def test_complete_task_before_due_creates_manual_completion_anchor(tmp_path) -> None:
+    service = XushiService(Settings(database_path=tmp_path / "xushi.db", api_token="test-token"))
+    task = service.create_task(
+        TaskCreate(
+            title="喝水",
+            schedule=Schedule(
+                kind="recurring",
+                run_at=datetime(2026, 5, 9, 12, 0, tzinfo=UTC),
+                rrule="FREQ=HOURLY;INTERVAL=2",
+                timezone="UTC",
+                anchor="completion",
+            ),
+            action={"type": "reminder", "payload": {"message": "喝水"}},
+            follow_up_policy=FollowUpPolicy(requires_confirmation=True),
+        )
+    )
+
+    completed = service.complete_task(task.id, now=datetime(2026, 5, 9, 10, 40, tzinfo=UTC))
+    deliveries_after_completion = service.list_deliveries()
+    before_next_interval = service.tick(now=datetime(2026, 5, 9, 12, 39, tzinfo=UTC))
+    next_runs = service.tick(now=datetime(2026, 5, 9, 12, 41, tzinfo=UTC))
+
+    assert completed is not None
+    assert completed.status == "succeeded"
+    assert completed.confirmed_at == datetime(2026, 5, 9, 10, 40, tzinfo=UTC)
+    assert completed.result["manual_completion"] is True
+    assert deliveries_after_completion == []
+    assert before_next_interval == []
+    assert len(next_runs) == 1
+    assert next_runs[0].scheduled_for == datetime(2026, 5, 9, 12, 40, tzinfo=UTC)
+
+
+def test_complete_task_confirms_delayed_primary_run(tmp_path) -> None:
+    shanghai = get_tzinfo("Asia/Shanghai")
+    service = XushiService(
+        Settings(
+            database_path=tmp_path / "xushi.db",
+            api_token="test-token",
+            quiet_policy=QuietPolicy(
+                enabled=True,
+                timezone="Asia/Shanghai",
+                windows=[QuietWindow(start="22:30", end="08:00")],
+            ),
+        )
+    )
+    task = service.create_task(
+        TaskCreate(
+            title="喝水",
+            schedule=Schedule(
+                kind="one_shot",
+                run_at=datetime(2026, 5, 9, 23, 0, tzinfo=shanghai),
+                timezone="Asia/Shanghai",
+            ),
+            action={"type": "reminder", "payload": {"message": "喝水"}},
+        )
+    )
+    run = service.trigger_task(task.id, now=datetime(2026, 5, 9, 23, 0, tzinfo=shanghai))
+
+    completed = service.complete_task(
+        task.id,
+        now=datetime(2026, 5, 9, 23, 10, tzinfo=shanghai),
+    )
+    service.tick(now=datetime(2026, 5, 10, 8, 0, tzinfo=shanghai))
+
+    updated = service.get_run(run.id)
+    assert completed is not None
+    assert completed.id == run.id
+    assert completed.result["completion_source"] == "task_complete"
+    assert updated is not None
+    assert updated.status == "succeeded"
+    assert service.list_deliveries()[0].status == "cancelled"
+    assert service.list_notifications() == []
 
 
 def test_completion_anchor_requires_confirmation_policy(tmp_path) -> None:

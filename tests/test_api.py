@@ -106,6 +106,28 @@ def test_api_returns_unified_not_found_error(tmp_path) -> None:
     }
 
 
+def test_capabilities_endpoint_is_public_and_agent_readable(tmp_path) -> None:
+    settings = Settings(database_path=tmp_path / "xushi.db", api_token="test-token")
+    client = TestClient(create_app(settings))
+
+    response = client.get("/api/v1/capabilities")
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["entrypoints"]["http"]["openapi"] == "GET /openapi.json"
+    assert payload["entrypoints"]["cli"]["capabilities"] == "xushi capabilities"
+    confirm_latest = next(
+        item for item in payload["capabilities"] if item["id"] == "confirm_latest_run"
+    )
+    assert confirm_latest["http"]["path"] == "/api/v1/tasks/{task_id}/runs/confirm-latest"
+    assert confirm_latest["cli"]["command"] == "xushi confirm-latest <task_id>"
+    assert confirm_latest["openclaw_plugin"]["tool"] == "xushi_confirm_latest_run"
+    complete_task = next(item for item in payload["capabilities"] if item["id"] == "complete_task")
+    assert complete_task["http"]["path"] == "/api/v1/tasks/{task_id}/complete"
+    assert complete_task["cli"]["command"] == "xushi complete <task_id>"
+    assert complete_task["openclaw_plugin"]["tool"] == "xushi_complete_task"
+
+
 def test_create_task_rejects_naive_datetime(tmp_path) -> None:
     settings = Settings(database_path=tmp_path / "xushi.db", api_token="test-token")
     client = TestClient(create_app(settings))
@@ -320,6 +342,39 @@ def test_confirm_latest_run_endpoint_and_run_filters(tmp_path) -> None:
     assert [item["id"] for item in pending_response.json()["data"]] == [first_run["id"]]
     assert [item["id"] for item in active_response.json()["data"]] == [first_run["id"]]
     assert len(limited_response.json()["data"]) == 1
+
+
+def test_complete_task_endpoint_creates_manual_completion_anchor(tmp_path) -> None:
+    settings = Settings(database_path=tmp_path / "xushi.db", api_token="test-token")
+    client = TestClient(create_app(settings))
+    create_response = client.post(
+        "/api/v1/tasks",
+        headers={"Authorization": "Bearer test-token"},
+        json={
+            "title": "喝水",
+            "schedule": {
+                "kind": "recurring",
+                "run_at": datetime(2026, 5, 9, 12, 0, tzinfo=UTC).isoformat(),
+                "rrule": "FREQ=HOURLY;INTERVAL=2",
+                "timezone": "UTC",
+                "anchor": "completion",
+            },
+            "action": {"type": "reminder", "payload": {"message": "喝水"}},
+            "follow_up_policy": {"requires_confirmation": True},
+        },
+    )
+    task_id = create_response.json()["data"]["id"]
+
+    complete_response = client.post(
+        f"/api/v1/tasks/{task_id}/complete",
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert complete_response.status_code == 200
+    data = complete_response.json()["data"]
+    assert data["status"] == "succeeded"
+    assert data["confirmed_at"] is not None
+    assert data["result"]["manual_completion"] is True
 
 
 def test_run_list_uses_safe_default_limit(tmp_path) -> None:

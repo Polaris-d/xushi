@@ -83,7 +83,7 @@ Let digest payloads distinguish quiet digest and reminder digest, update origina
 
 - [x] **Step 1: Bump version**
 
-Bump the app and bundled plugin metadata to `0.1.12` because this is a backward-compatible feature addition in the current pre-1.0 release line.
+Bump the app and bundled plugin metadata to the next available release version because this is a backward-compatible feature addition in the current pre-1.0 release line.
 
 - [x] **Step 2: Update docs**
 

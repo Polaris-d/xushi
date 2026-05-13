@@ -29,6 +29,10 @@ def main() -> int:
         errors.append("openclaw.plugin.json version does not match pyproject.toml")
     if package["version"] != app_version:
         errors.append("package.json version does not match pyproject.toml")
+    if f'__version__ = "{app_version}"' not in (
+        ROOT / "src" / "xushi" / "__init__.py"
+    ).read_text(encoding="utf-8"):
+        errors.append("src/xushi/__init__.py version does not match pyproject.toml")
 
     errors.extend(
         _compare_tree(

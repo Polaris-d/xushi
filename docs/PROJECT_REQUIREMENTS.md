@@ -19,12 +19,15 @@
 - 支持固定时间、循环任务、时间窗口、截止时间、持续时长、过期策略、完成确认和未完成跟进。
 - 支持 `idempotency_key`，保障 agent 重试创建任务时不会重复生成任务；同一幂等键若携带不同请求体，必须返回冲突错误，避免 agent 静默复用错误任务。
 - API 成功和错误响应均使用统一 JSON 结构，方便 agent 稳定解析。
+- 必须提供面向 agent 的能力发现入口，HTTP `GET /api/v1/capabilities`、CLI `xushi capabilities` 和 OpenClaw `xushi_capabilities` 应描述同一套核心操作及其对应调用方式。
+- HTTP-only agent 必须能通过 `GET /api/v1/capabilities`、`GET /openapi.json` 或 `/docs` 发现确认完成、查询运行记录、重试投递等关键接口；CLI-only agent 必须能通过 `xushi capabilities` 或 `xushi --help` 发现等价命令。
 - 支持 ISO 8601 时间、RRULE、timezone。
 - 支持 ISO 8601 duration 的天、时、分、秒组合，例如 `P1D`、`PT10M`、`P1DT2H`；年月、小数和负数 duration 必须显式拒绝，避免自然月和时区语义歧义。
 - API 中所有具体时间点必须携带时区偏移，例如 `Z` 或 `+08:00`；不带时区的时间一律拒绝，服务端不得猜测默认时区。
 - 任务必须单独标注 IANA 时区，例如 `Asia/Shanghai`；RRULE、工作日策略、免打扰窗口和摘要投递等本地日历语义都必须按该时区或用户配置的时区解释。
 - 支持中国大陆工作日、法定节假日和调休判断；节假日与调休数据必须标注关联节日名称；工作日策略下可将触发时间顺延到下一个中国大陆工作日。
 - 支持基于完成确认时间重新计算下一次提醒，适配久坐提醒等 completion anchor 场景。
+- 支持用户在下一次提醒到点前主动标记 completion anchor 循环任务已完成；系统应创建一条不投递提醒的手动完成锚点 run，并从该确认时间重新计算下一次提醒。
 - `completion` anchor 任务必须启用完成确认；从其他 anchor 切换到 `completion` 时，若最近一条主运行记录已经结束但没有确认时间，必须拒绝更新并要求先建立明确完成锚点。
 - 任务到期事实和提醒投递行为必须分层：`Run` 记录到期事实，`Delivery` 记录实际投递计划、延迟、聚合和结果。
 - 支持用户级全局免打扰策略，允许多个时间窗口，并支持 `everyday`、`workdays`、`weekends`、`weekdays` 生效规则；`workdays` 必须复用中国大陆工作日和调休判断。
@@ -46,9 +49,9 @@
 - Hermes executor 必须支持可配置 HTTP agent webhook，支持 `webhook_url`、`token_env`、`message_field`、`agent_id`、`conversation_id`、`channel`、`deliver` 和请求超时配置。
 - 通用 webhook executor v1 仅保留 schema 位置，调用时返回明确未实现状态。
 - v1 暂不提供 command executor，避免跨平台 shell、命令注入和环境差异扩大配置复杂度。
-- OpenClaw 插件必须提供执行器查看工具；executor 写入由本地 `config.json` 管理，不通过 API 或插件保存。
+- OpenClaw 插件必须提供执行器查看工具、能力发现工具和常用任务/运行记录工具；executor 写入由本地 `config.json` 管理，不通过 API 或插件保存。
 - 长任务支持执行器异步回调最终结果，更新运行记录成功或失败状态。
-- 提供 CLI 和本地 Web 管理台。
+- 提供 CLI 和本地 Web 管理台；CLI 必须覆盖 agent 常用操作，包括任务创建/查询/更新/归档、运行记录查询、按任务记录完成、按任务确认最近运行、按 run 确认、长任务 callback、投递查看/重试和配置 reload。
 - 提供 OpenClaw TypeScript 原生插件。
 - 提供本地配置初始化命令，生成本地 token、SQLite 路径和 daemon 端口配置，便于 OpenClaw 插件和用户共享同一连接信息。
 - 提供诊断命令，检查配置文件、数据库目录、监听端口和 executor 环境变量/TLS/agent 路由风险，帮助用户定位 daemon 和投递链路问题。
@@ -58,7 +61,7 @@
 - 安装指南必须优先说明 OpenClaw 插件、OpenClaw `/hooks/agent` executor 和 Hermes agent webhook 配置。
 - 提供 `xushi-skills` 任务类型指南包，帮助 agent 判断任务类型、生成任务 schema、配置跟进策略并在需求不明确时追问用户。
 - 安装指南必须要求 agent 在安装前询问用户是否安装 `xushi-skills`，并明确强烈推荐安装；用户同意后应通过静默参数完成安装，不在脚本执行中二次追问。
-- 安装指南必须要求 agent 在配置完成后与用户互动，发送真实测试提醒并确认目标渠道能够正常收到消息，不能只以 `xushi doctor` 作为安装完成标准。
+- 安装指南必须要求 agent 在安装或升级后与用户互动，发送真实测试提醒并确认目标渠道能够正常收到消息，不能只以 `xushi doctor`、安装命令成功或升级命令成功作为完成标准。
 - 安装后的配置引导必须突出易错点：agent/plugin 环境变量作用域、本地 token 是否同步、`xushi-daemon` 是否已 reload 或重启、executor id 是否与 `action.executor_id` 精确匹配、hook URL 是否可从 daemon 访问，以及 OpenClaw/Hermes 渠道路由是否真正送达用户。
 - 安装脚本必须支持通过显式参数安装辅助 skill 目标；当前仅支持 `openclaw` 和 `hermes`。文档不得再提供 Codex skill 安装目标。
 - 安装脚本必须允许 agent 通过 `XUSHI_OPENCLAW_SKILLS_DIR` / `XUSHI_HERMES_SKILLS_DIR` 或已有的 `OPENCLAW_SKILLS_DIR` / `HERMES_SKILLS_DIR` 指定自定义 skills 根目录，避免不同 agent 目录调整后安装到错误位置。
@@ -66,6 +69,7 @@
 - 提供用户手动触发的 CLI 安全升级能力；序时不得静默自动升级。
 - 手动升级必须先备份 `config.json`、SQLite 数据库和存在的 WAL/SHM sidecar，升级失败时不得丢失旧数据。
 - 手动升级必须支持查看状态、检查目标版本、创建备份、从 GitHub Release 下载替换全局命令和从备份恢复。
+- 手动升级后必须要求同步已安装的内置插件/skills，并重新执行真实投递测试，确认新版本二进制、daemon、插件、skills 和 executor 配置仍然匹配。
 - 提供 wheel 和跨平台预编译二进制构建配置，降低非 Python 用户安装门槛。
 - 提供 tag 触发的 GitHub Release 工作流，发布 wheel 与跨平台二进制产物。
 - GitHub Release 资产必须使用唯一、可读的平台命名，并包含自动 release notes 和 SHA256 校验和。
@@ -83,6 +87,7 @@
 - 数据库 schema 必须支持就地迁移，旧版本本地库升级后不得因缺少新增列或索引而无法启动。
 - 支持确认运行记录已完成，确认后停止后续跟进提醒。
 - 支持按任务、状态、活跃状态和条数过滤运行记录，便于 agent 找到真正需要处理的 run；任务、运行记录和 delivery 列表 API 默认必须有安全条数上限，避免历史数据增长后默认全量返回。
+- 支持按任务记录完成：若存在未完成主 run，直接确认该 run；若不存在未完成主 run 且任务是 completion anchor 循环任务，创建手动完成锚点 run，不触发提醒或 delivery。
 - 支持按任务确认最近一次待确认主运行记录，避免 agent 先查询大量 run 再手动筛选 run_id。
 - 运行记录确认或任务归档后，关联的待处理跟进记录必须标记为已取消，默认查询和统计不应把它们视为待处理事项。
 - `xushi-skills` 必须明确喝水、起立、伸展、眼休息等健康习惯默认使用 completion anchor，并引导 agent 优先使用全局免打扰策略处理夜间投递，同时记录真实使用中发生的优化反馈草稿。
@@ -96,7 +101,7 @@
 
 - 抢购/抢票：固定时间触发，短执行窗口，过期即失败，不补发。
 - 饭后吃药：固定或相对时间提醒，允许短暂延迟，需要确认，未确认则跟进。
-- 久坐提醒：基于上次确认时间计算下一次提醒，未确认持续跟进。
+- 久坐提醒：基于上次确认时间计算下一次提醒，用户提前完成时也可记录完成锚点，未确认则持续跟进。
 - 截止任务：可随时开始，截止前完成，逾期后询问是否改期。
 - 尽快任务：使用 `asap` 调度，创建后尽快提醒，完成时间模糊，持续温和跟进。
 - 模糊事项：先进入待规划池，不强制排期，也不自动触发。
@@ -160,4 +165,7 @@
 | 2026-05-11 | 明确 | `completion` anchor 必须依赖确认时间，禁止从无确认终态运行记录迁移出隐式锚点。 |
 | 2026-05-11 | 明确 | 发布二进制必须固定稳定 Python 构建版本并执行启动 smoke test。 |
 | 2026-05-12 | 更正 | 明确发布 smoke test 必须短超时且能捕获 Windows 原生命令非零退出，避免二进制帮助命令或 daemon 常驻导致发布挂起。 |
+| 2026-05-12 | 明确 | 增加 agent 能力发现入口，要求 HTTP、CLI、OpenClaw 插件和 xushi-skills 对常用操作保持一致说明。 |
+| 2026-05-12 | 明确 | 安装或升级后都必须进行真实投递测试，不能只依赖 `doctor`、安装命令或升级命令结果。 |
+| 2026-05-12 | 新增 | 增加按任务提前记录完成能力，允许 completion anchor 循环任务在未到提醒时间时创建手动完成锚点 run。 |
 | 2026-05-14 | 新增 | 增加普通提醒同分钟轻量聚合需求，并明确绕过和短时效任务不参与聚合。 |

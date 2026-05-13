@@ -25,6 +25,10 @@ MANIFEST_FILE = "manifest.json"
 HISTORY_FILE = "upgrade_history.jsonl"
 DEFAULT_REPO_SLUG = "Polaris-d/xushi"
 BINARY_NAMES = ("xushi", "xushi-daemon")
+POST_UPGRADE_NOTICE = (
+    "升级完成后请重新运行 xushi doctor, 确认 xushi-daemon 使用新版本和正确配置, "
+    "然后发送一条唯一测试提醒并让用户确认目标渠道已收到。"
+)
 
 
 class UpgradeError(RuntimeError):
@@ -107,6 +111,7 @@ class UpgradeResult:
             "backup_id": self.backup_id,
             "target_version": self.target_version,
             "mode": "release_binary",
+            "post_upgrade_notice": POST_UPGRADE_NOTICE,
             "assets": [asset.to_json() for asset in self.assets],
         }
 
