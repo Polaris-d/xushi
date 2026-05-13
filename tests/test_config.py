@@ -28,6 +28,13 @@ def test_write_initial_config_creates_local_token_and_paths(tmp_path, monkeypatc
     assert saved["host"] == "127.0.0.1"
     assert saved["port"] == 18766
     assert saved["scheduler_interval_seconds"] == 30
+    assert saved["reminder_aggregation"] == {
+        "enabled": True,
+        "window_seconds": 60,
+        "min_items": 2,
+        "max_items": 10,
+        "include_pending": True,
+    }
     assert saved["executors"][0]["id"] == "openclaw"
     assert saved["executors"][0]["config"]["mode"] == "hooks_agent"
     assert saved["executors"][0]["config"]["webhook_url"] == (
@@ -118,6 +125,35 @@ def test_settings_loads_storage_and_retry_policy_from_config_file(
     assert settings.sqlite_synchronous == "normal"
     assert settings.auto_retry_failed_deliveries is True
     assert settings.auto_retry_max_attempts == 2
+
+
+def test_settings_loads_reminder_aggregation_from_config_file(tmp_path, monkeypatch) -> None:
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "api_token": "token-from-config",
+                "database_path": str(tmp_path / "xushi.db"),
+                "reminder_aggregation": {
+                    "enabled": False,
+                    "window_seconds": 30,
+                    "min_items": 3,
+                    "max_items": 8,
+                    "include_pending": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("XUSHI_CONFIG_PATH", str(config_path))
+
+    settings = Settings.from_env()
+
+    assert settings.reminder_aggregation.enabled is False
+    assert settings.reminder_aggregation.window_seconds == 30
+    assert settings.reminder_aggregation.min_items == 3
+    assert settings.reminder_aggregation.max_items == 8
+    assert settings.reminder_aggregation.include_pending is False
 
 
 def test_settings_loads_executor_configuration_from_config_file(tmp_path, monkeypatch) -> None:

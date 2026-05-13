@@ -17,6 +17,7 @@ from xushi.bridges import (
     DEFAULT_OPENCLAW_TOKEN_ENVS,
     parse_bool,
 )
+from xushi.capabilities import capabilities_payload
 from xushi.config import (
     DEFAULT_DEV_TOKEN,
     DEFAULT_HOST,
@@ -26,7 +27,7 @@ from xushi.config import (
     load_config,
     write_initial_config,
 )
-from xushi.models import Executor, RunStatus, TaskCreate
+from xushi.models import Executor, RunCallback, RunStatus, TaskCreate, TaskPatch
 from xushi.plugins import bundled_plugin_status, install_bundled_plugin
 from xushi.service import InvalidTaskConfigurationError, XushiService
 from xushi.skills import bundled_skills_status, install_bundled_skills
@@ -323,6 +324,12 @@ def doctor(
 
 
 @app.command()
+def capabilities() -> None:
+    """列出 CLI、HTTP API 和插件工具的 agent 能力清单。"""
+    _echo_json(capabilities_payload())
+
+
+@app.command()
 def create(task_file: Path) -> None:
     """从 JSON 文件创建任务。"""
     payload = json.loads(task_file.read_text(encoding="utf-8"))
@@ -334,16 +341,61 @@ def create(task_file: Path) -> None:
 
 
 @app.command("list")
-def list_tasks() -> None:
+def list_tasks(
+    limit: Annotated[int | None, typer.Option(help="最多返回多少条任务。")] = None,
+) -> None:
     """列出任务。"""
-    tasks = [task.model_dump(mode="json") for task in _service().list_tasks()]
+    tasks = [task.model_dump(mode="json") for task in _service().list_tasks(limit=limit)]
     _echo_json(tasks)
+
+
+@app.command("get")
+def get_task(task_id: str) -> None:
+    """查看单个任务详情。"""
+    task = _service().get_task(task_id)
+    if task is None:
+        raise typer.BadParameter("task not found")
+    typer.echo(task.model_dump_json(indent=2))
+
+
+@app.command("update")
+def update_task(task_id: str, patch_file: Path) -> None:
+    """从 JSON 文件部分更新任务。"""
+    payload = json.loads(patch_file.read_text(encoding="utf-8"))
+    service = _service()
+    try:
+        task = service.update_task(task_id, TaskPatch.model_validate(payload))
+    except InvalidTaskConfigurationError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    if task is None:
+        raise typer.BadParameter("task not found")
+    typer.echo(task.model_dump_json(indent=2))
+
+
+@app.command("delete")
+def delete_task(task_id: str) -> None:
+    """归档任务并取消仍打开的运行记录。"""
+    if not _service().delete_task(task_id):
+        raise typer.BadParameter("task not found")
+    _echo_json({"id": task_id, "status": "archived"})
 
 
 @app.command()
 def trigger(task_id: str) -> None:
     """手动触发任务。"""
     run = _service().trigger_task(task_id)
+    typer.echo(run.model_dump_json(indent=2))
+
+
+@app.command("complete")
+def complete_task(task_id: str) -> None:
+    """按任务记录完成，必要时创建手动完成锚点。"""
+    service = _service()
+    if service.get_task(task_id) is None:
+        raise typer.BadParameter("task not found")
+    run = service.complete_task(task_id)
+    if run is None:
+        raise typer.BadParameter("task has no completable run or completion anchor")
     typer.echo(run.model_dump_json(indent=2))
 
 
@@ -386,6 +438,15 @@ def confirm_latest(task_id: str) -> None:
     run = service.confirm_latest_run(task_id)
     if run is None:
         raise typer.BadParameter("pending run not found")
+    typer.echo(run.model_dump_json(indent=2))
+
+
+@app.command("confirm")
+def confirm_run(run_id: str) -> None:
+    """确认指定运行记录已完成。"""
+    run = _service().confirm_run(run_id)
+    if run is None:
+        raise typer.BadParameter("run not found")
     typer.echo(run.model_dump_json(indent=2))
 
 
@@ -457,10 +518,46 @@ def notifications() -> None:
 
 
 @app.command()
-def deliveries() -> None:
+def deliveries(
+    limit: Annotated[int | None, typer.Option(help="最多返回多少条投递记录。")] = None,
+) -> None:
     """列出投递计划。"""
-    items = [delivery.model_dump(mode="json") for delivery in _service().list_deliveries()]
+    items = [
+        delivery.model_dump(mode="json") for delivery in _service().list_deliveries(limit=limit)
+    ]
     _echo_json(items)
+
+
+@app.command("callback")
+def callback_run(
+    run_id: str,
+    status: Annotated[
+        str,
+        typer.Option(help="最终状态, 只能是 succeeded 或 failed。"),
+    ],
+    result_file: Annotated[
+        Path | None,
+        typer.Option(help="包含 result 对象的 JSON 文件。"),
+    ] = None,
+    error_message: Annotated[
+        str | None,
+        typer.Option("--error", help="失败原因或补充错误信息。"),
+    ] = None,
+) -> None:
+    """提交长任务最终结果。"""
+    result_payload = {}
+    if result_file is not None:
+        result_payload = json.loads(result_file.read_text(encoding="utf-8"))
+        if not isinstance(result_payload, dict):
+            raise typer.BadParameter("result file must contain a JSON object")
+    try:
+        callback = RunCallback(status=status, result=result_payload, error=error_message)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    run = _service().callback_run(run_id, callback)
+    if run is None:
+        raise typer.BadParameter("run not found")
+    typer.echo(run.model_dump_json(indent=2))
 
 
 @app.command("retry-deliveries")

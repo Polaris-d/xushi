@@ -13,6 +13,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from xushi import __version__
+from xushi.capabilities import capabilities_payload
 from xushi.config import Settings
 from xushi.models import RunCallback, RunStatus, TaskCreate, TaskPatch
 from xushi.runtime import run_scheduler_loop
@@ -94,6 +95,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def health() -> dict[str, Any]:
         return api_response({"name": "xushi", "status": "ok"})
 
+    @app.get("/api/v1/capabilities")
+    def capabilities() -> dict[str, Any]:
+        """返回 CLI、HTTP API 和插件工具的 agent 能力清单。"""
+        return api_response(capabilities_payload())
+
     @app.post("/api/v1/tasks", status_code=201, dependencies=[Depends(require_token)])
     def create_task(request: TaskCreate, response: Response) -> dict[str, Any]:
         try:
@@ -149,6 +155,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         response.status_code = status.HTTP_201_CREATED
         return api_response(run.model_dump(mode="json"), "created", 201)
 
+    @app.post(
+        "/api/v1/tasks/{task_id}/complete",
+        dependencies=[Depends(require_token)],
+        summary="Complete a task",
+        description=(
+            "Record task completion. If a primary run is waiting, confirm it. "
+            "If no run exists yet for a completion-anchored recurring task, create "
+            "a manual completion anchor without sending a reminder."
+        ),
+    )
+    def complete_task(task_id: str) -> dict[str, Any]:
+        if service.get_task(task_id) is None:
+            raise HTTPException(status_code=404, detail="task not found")
+        run = service.complete_task(task_id)
+        if run is None:
+            raise HTTPException(
+                status_code=409,
+                detail="task has no completable run or completion anchor",
+            )
+        return api_response(run.model_dump(mode="json"))
+
     @app.get("/api/v1/runs", dependencies=[Depends(require_token)])
     def list_runs(
         task_id: str | None = None,
@@ -197,14 +224,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def metrics() -> dict[str, Any]:
         return api_response(service.metrics_snapshot())
 
-    @app.post("/api/v1/runs/{run_id}/confirm", dependencies=[Depends(require_token)])
+    @app.post(
+        "/api/v1/runs/{run_id}/confirm",
+        dependencies=[Depends(require_token)],
+        summary="Confirm a run",
+        description="Confirm one run by run_id and stop related follow-up reminders.",
+    )
     def confirm_run(run_id: str) -> dict[str, Any]:
         run = service.confirm_run(run_id)
         if run is None:
             raise HTTPException(status_code=404, detail="run not found")
         return api_response(run.model_dump(mode="json"))
 
-    @app.post("/api/v1/tasks/{task_id}/runs/confirm-latest", dependencies=[Depends(require_token)])
+    @app.post(
+        "/api/v1/tasks/{task_id}/runs/confirm-latest",
+        dependencies=[Depends(require_token)],
+        summary="Confirm latest pending primary run",
+        description=(
+            "When the user says a known task is done, confirm the task's latest "
+            "pending primary run without triggering a new reminder."
+        ),
+    )
     def confirm_latest_run(task_id: str) -> dict[str, Any]:
         if service.get_task(task_id) is None:
             raise HTTPException(status_code=404, detail="task not found")

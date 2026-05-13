@@ -4,15 +4,20 @@
 
 ## 工具
 
+- `xushi_capabilities`：列出当前 daemon 暴露的 HTTP API、CLI 命令和插件工具。
 - `xushi_health`：检查 daemon 是否在线。
 - `xushi_create_task`：创建结构化任务。
 - `xushi_list_tasks`：列出任务。
 - `xushi_get_task`：查看任务。
+- `xushi_update_task`：部分更新任务。
+- `xushi_delete_task`：归档任务并取消仍打开的运行记录。
 - `xushi_trigger_task`：手动触发任务。
+- `xushi_complete_task`：按任务记录完成；可在下一次提醒到点前为 completion anchor 循环任务创建手动完成锚点。
 - `xushi_list_runs`：列出运行记录，支持按任务、状态、活跃状态和条数过滤。
+- `xushi_list_notifications`：列出本地通知记录。
 - `xushi_list_deliveries`：列出投递计划，查看提醒是否被免打扰延迟、聚合、跳过或投递。
 - `xushi_retry_deliveries`：重试仍需要投递的失败记录。
-- `xushi_reload_config`：显式重新加载 daemon 的 executor 和全局免打扰配置。
+- `xushi_reload_config`：显式重新加载 daemon 的 executor、全局免打扰、提醒聚合和自动重试配置。
 - `xushi_confirm_run`：确认运行记录已完成，停止后续跟进。
 - `xushi_confirm_latest_run`：确认某任务最近一次待确认主运行记录。
 - `xushi_callback_run`：提交长任务最终结果。
@@ -52,11 +57,11 @@ OpenClaw config 可覆盖：
 }
 ```
 
-如果 daemon 未启动或 token 未配置，先运行 `xushi_install_hint` 查看当前插件读取的地址和 token 环境变量名。
+如果 daemon 未启动或 token 未配置，先运行 `xushi_install_hint` 查看当前插件读取的地址和 token 环境变量名。若 agent 不确定应该用哪个工具，先运行 `xushi_capabilities`；它与 HTTP `GET /api/v1/capabilities` 和 CLI `xushi capabilities` 返回同一套能力清单。用户说某任务完成时优先用 `xushi_complete_task`；它会先确认已有未完成主 run，若 completion anchor 循环任务还没到下次提醒时间，则写入不投递提醒的手动完成锚点。`xushi_trigger_task` 只用于测试或立即执行，不用于完成确认。
 
 ## 提醒投递到 Agent
 
-序时 daemon 不能自动调用 OpenClaw 插件本身。要让提醒进入 OpenClaw/飞书等 agent 渠道，请把 OpenClaw hooks agent executor 写入 `~/.xushi/config.json` 的 `executors` 数组，然后调用 `xushi_reload_config` 或 `xushi reload-config` 让运行中的 daemon 重新加载。只有修改 daemon 进程环境变量、API token、数据库路径、监听端口或调度间隔时才需要重启 daemon：
+序时 daemon 不能自动调用 OpenClaw 插件本身。要让提醒进入 OpenClaw/飞书等 agent 渠道，请把 OpenClaw hooks agent executor 写入 `~/.xushi/config.json` 的 `executors` 数组，然后调用 `xushi_reload_config` 或 `xushi reload-config` 让运行中的 daemon 重新加载。修改全局 `quiet_policy`、`reminder_aggregation` 或自动重试配置也只需要 reload；只有修改 daemon 进程环境变量、API token、数据库路径、监听端口或调度间隔时才需要重启 daemon：
 
 ```json
 {

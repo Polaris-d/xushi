@@ -1,6 +1,6 @@
 {
   "name": "@xushi/openclaw-plugin",
-  "version": "0.1.11",
+  "version": "0.1.14",
   "description": "OpenClaw native plugin for xushi local scheduling daemon.",
   "type": "module",
   "files": [

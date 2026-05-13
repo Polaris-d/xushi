@@ -55,4 +55,4 @@ Describe a possible product, API, skill, or documentation improvement.
 
 ## Good Note Shape
 
-A good note says "At 10:20 the user said they had drunk water and stood up, but I only replied conversationally and did not confirm the xushi runs. When the user asked, I had to list recent runs and manually identify the pending records. Expected: if the task id is known, the agent should call confirm-latest directly." This is actual, detailed, and points to an actionable API/skill improvement.
+A good note says "At 10:20 the user said they had drunk water and stood up, but I only replied conversationally and did not record completion in xushi. When the user asked, I had to list recent runs and manually identify what was pending. Expected: if the task id is known, the agent should call the task-level complete operation so early completion and pending-run confirmation both work." This is actual, detailed, and points to an actionable API/skill improvement.

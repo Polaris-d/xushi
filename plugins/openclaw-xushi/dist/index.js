@@ -56,6 +56,17 @@ export default definePluginEntry({
     const config = resolveConfig(api);
 
     api.registerTool({
+      name: "xushi_capabilities",
+      description:
+        "列出当前 xushi daemon 面向 agent 暴露的 HTTP API、CLI 命令和插件工具。使用不熟悉的流程前先调用它。",
+      parameters: Type.Object({}),
+      async execute() {
+        const response = await fetch(`${config.baseUrl}/api/v1/capabilities`);
+        return textResult(await response.json());
+      },
+    });
+
+    api.registerTool({
       name: "xushi_health",
       description: "检查本机 xushi daemon 是否在线。",
       parameters: Type.Object({}),
@@ -87,9 +98,11 @@ export default definePluginEntry({
     api.registerTool({
       name: "xushi_list_tasks",
       description: "列出本机 xushi 任务。",
-      parameters: Type.Object({}),
-      async execute() {
-        return textResult(await xushiRequest(config, "/api/v1/tasks"));
+      parameters: Type.Object({
+        limit: Type.Optional(Type.Number({ description: "最多返回多少条。" })),
+      }),
+      async execute(_id, params) {
+        return textResult(await xushiRequest(config, withQuery("/api/v1/tasks", params)));
       },
     });
 
@@ -105,6 +118,38 @@ export default definePluginEntry({
     });
 
     api.registerTool({
+      name: "xushi_update_task",
+      description: "部分更新 xushi 任务。patch 必须符合 xushi TaskPatch schema。",
+      parameters: Type.Object({
+        task_id: Type.String({ description: "xushi 任务 ID。" }),
+        patch: Type.Record(Type.String(), Type.Any(), {
+          description: "符合 xushi TaskPatch schema 的部分更新 JSON。",
+        }),
+      }),
+      async execute(_id, params) {
+        return textResult(
+          await xushiRequest(config, `/api/v1/tasks/${params.task_id}`, {
+            method: "PATCH",
+            body: JSON.stringify(params.patch),
+          }),
+        );
+      },
+    });
+
+    api.registerTool({
+      name: "xushi_delete_task",
+      description: "归档 xushi 任务，并取消该任务仍打开的运行记录。",
+      parameters: Type.Object({
+        task_id: Type.String({ description: "xushi 任务 ID。" }),
+      }),
+      async execute(_id, params) {
+        return textResult(
+          await xushiRequest(config, `/api/v1/tasks/${params.task_id}`, { method: "DELETE" }),
+        );
+      },
+    });
+
+    api.registerTool({
       name: "xushi_trigger_task",
       description: "手动触发一个 xushi 任务，用于测试或立即执行。",
       parameters: Type.Object({
@@ -113,6 +158,22 @@ export default definePluginEntry({
       async execute(_id, params) {
         return textResult(
           await xushiRequest(config, `/api/v1/tasks/${params.task_id}/runs`, { method: "POST" }),
+        );
+      },
+    });
+
+    api.registerTool({
+      name: "xushi_complete_task",
+      description:
+        "按任务记录完成。若已有未完成主 run 则确认它；若 completion anchor 循环任务尚未到点，则创建不投递提醒的手动完成锚点。用户说已完成但可能早于下一次提醒时优先使用它。",
+      parameters: Type.Object({
+        task_id: Type.String({ description: "xushi 任务 ID。" }),
+      }),
+      async execute(_id, params) {
+        return textResult(
+          await xushiRequest(config, `/api/v1/tasks/${params.task_id}/complete`, {
+            method: "POST",
+          }),
         );
       },
     });
@@ -140,13 +201,25 @@ export default definePluginEntry({
         return textResult(await xushiRequest(config, withQuery("/api/v1/runs", params)));
       },
     });
+
+    api.registerTool({
+      name: "xushi_list_notifications",
+      description: "列出 xushi 本地通知记录，用于排查未配置 executor 时的本地通知链路。",
+      parameters: Type.Object({}),
+      async execute() {
+        return textResult(await xushiRequest(config, "/api/v1/notifications"));
+      },
+    });
+
     api.registerTool({
       name: "xushi_list_deliveries",
       description:
         "列出 xushi 投递计划。用于查看 run 是否已投递、被免打扰延迟、被摘要聚合、跳过、静默或失败。",
-      parameters: Type.Object({}),
-      async execute() {
-        return textResult(await xushiRequest(config, "/api/v1/deliveries"));
+      parameters: Type.Object({
+        limit: Type.Optional(Type.Number({ description: "最多返回多少条。" })),
+      }),
+      async execute(_id, params) {
+        return textResult(await xushiRequest(config, withQuery("/api/v1/deliveries", params)));
       },
     });
     api.registerTool({
@@ -168,7 +241,7 @@ export default definePluginEntry({
     api.registerTool({
       name: "xushi_reload_config",
       description:
-        "显式重新加载 xushi config.json 中的 executors 和全局 quiet_policy。API token、数据库路径、监听端口和调度间隔仍需要重启 daemon。",
+        "显式重新加载 xushi config.json 中的 executors、全局 quiet_policy、reminder_aggregation 和自动重试策略。API token、数据库路径、监听端口和调度间隔仍需要重启 daemon。",
       parameters: Type.Object({}),
       async execute() {
         return textResult(

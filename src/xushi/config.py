@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from xushi.bridges import DEFAULT_OPENCLAW_HOOKS_AGENT_URL, parse_bool
-from xushi.models import Executor, QuietPolicy
+from xushi.models import Executor, QuietPolicy, ReminderAggregationPolicy
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 18766
@@ -129,6 +129,7 @@ def write_initial_config(
         "auto_retry_failed_deliveries": DEFAULT_AUTO_RETRY_FAILED_DELIVERIES,
         "auto_retry_max_attempts": DEFAULT_AUTO_RETRY_MAX_ATTEMPTS,
         "quiet_policy": QuietPolicy().model_dump(mode="json"),
+        "reminder_aggregation": ReminderAggregationPolicy().model_dump(mode="json"),
         "executors": [executor.model_dump(mode="json") for executor in default_executors()],
     }
     resolved_config_path.write_text(
@@ -152,6 +153,9 @@ class Settings:
     auto_retry_failed_deliveries: bool = DEFAULT_AUTO_RETRY_FAILED_DELIVERIES
     auto_retry_max_attempts: int = DEFAULT_AUTO_RETRY_MAX_ATTEMPTS
     quiet_policy: QuietPolicy = field(default_factory=QuietPolicy)
+    reminder_aggregation: ReminderAggregationPolicy = field(
+        default_factory=ReminderAggregationPolicy
+    )
     executors: tuple[Executor, ...] = field(default_factory=default_executors)
 
     @classmethod
@@ -217,6 +221,9 @@ class Settings:
                 ),
             ),
             quiet_policy=QuietPolicy.model_validate(file_config.get("quiet_policy", {})),
+            reminder_aggregation=ReminderAggregationPolicy.model_validate(
+                file_config.get("reminder_aggregation", {})
+            ),
             executors=_load_executors(file_config),
         )
 

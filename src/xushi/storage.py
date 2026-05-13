@@ -420,6 +420,30 @@ class SQLiteStore:
             return None
         return Run.model_validate_json(row["payload"])
 
+    def latest_unconfirmed_primary_run_for_task(
+        self,
+        task_id: str,
+        statuses: set[str],
+    ) -> Run | None:
+        """返回任务最近一条指定状态且尚未确认的主运行记录。"""
+        placeholders = ", ".join("?" for _ in statuses)
+        with self._connect() as conn:
+            row = conn.execute(
+                f"""
+                SELECT payload FROM runs
+                WHERE task_id = ?
+                    AND status IN ({placeholders})
+                    AND confirmed_at IS NULL
+                    AND origin_run_id IS NULL
+                ORDER BY scheduled_for DESC
+                LIMIT 1
+                """,
+                (task_id, *sorted(statuses)),
+            ).fetchone()
+        if row is None:
+            return None
+        return Run.model_validate_json(row["payload"])
+
     def list_follow_ups_for_origin(self, origin_run_id: str) -> list[Run]:
         """返回某主运行记录下的跟进运行记录。"""
         with self._connect() as conn:

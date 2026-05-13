@@ -21,6 +21,12 @@ def test_readme_has_github_friendly_install_entrypoints() -> None:
     assert "scripts/install.sh" in readme
     assert "强烈推荐开启" in readme
     assert "测试提醒" in readme
+    assert "安装或升级完成后" in readme
+    assert "每次安装或升级后都必须做一次真实投递测试" in readme
+    assert "GET /api/v1/capabilities" in readme
+    assert "xushi capabilities" in readme
+    assert "xushi complete" in readme
+    assert "POST /api/v1/tasks/{task_id}/complete" in readme
 
 
 def test_license_is_mit_for_open_source_distribution() -> None:
@@ -48,6 +54,8 @@ def test_installation_guide_is_agent_readable() -> None:
     assert "strongly recommended" in guide
     assert "是否同时安装 OpenClaw 插件和 xushi-skills" in guide
     assert "Run an interactive delivery check" in guide
+    assert "after every new installation and after every upgrade" in guide
+    assert "After every upgrade, repeat the same interactive delivery check" in guide
     assert "我刚刚发送了一条序时测试提醒" in guide
     assert "Common mistakes to avoid" in guide
     assert "action.executor_id" in guide
@@ -55,6 +63,7 @@ def test_installation_guide_is_agent_readable() -> None:
     assert "Delivery is `delayed`" in guide
     assert "401 Unauthorized" in guide
     assert "xushi doctor" in guide
+    assert "xushi complete <task_id>" in guide
     assert "xushi deliveries" in guide
 
 
@@ -123,10 +132,16 @@ def test_openclaw_plugin_does_not_mutate_executor_configuration() -> None:
         encoding="utf-8"
     )
 
+    assert "xushi_capabilities" in manifest
     assert "xushi_list_executors" in manifest
     assert "xushi_reload_config" in manifest
     assert "xushi_reload_config" in source
+    assert "xushi_update_task" in manifest
+    assert "xushi_delete_task" in manifest
+    assert "xushi_list_notifications" in manifest
     assert "xushi_list_runs" in manifest
+    assert "xushi_complete_task" in manifest
+    assert "xushi_complete_task" in source
     assert "xushi_confirm_latest_run" in manifest
     assert "xushi_save_executor" not in manifest
     assert "xushi_save_executor" not in source
@@ -233,7 +248,13 @@ def test_xushi_skills_include_agent_task_type_guidance() -> None:
     assert "OpenClaw/Hermes-priority" in skill
     assert "Prefer OpenClaw and Hermes integration paths" in skill
     assert "anchor: \"completion\"" in skill
-    assert "confirming the latest pending run" in skill
+    assert "task-level complete operation" in skill
+    assert "xushi_complete_task" in skill
+    assert "GET /api/v1/capabilities" in skill
+    assert "POST /api/v1/tasks/{task_id}/complete" in skill
+    assert "POST /api/v1/tasks/{task_id}/runs/confirm-latest" in skill
+    assert "xushi confirm <run_id>" in skill
+    assert "After every installation, upgrade, or executor reconfiguration" in skill
     assert "喝水" in task_types
     assert "起立" in task_types
     assert "deadline" in task_types
@@ -270,6 +291,7 @@ def test_bundled_xushi_skills_match_repository_copy() -> None:
 
 def test_openclaw_plugin_version_matches_app_and_bundled_copy() -> None:
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    init_py = (ROOT / "src" / "xushi" / "__init__.py").read_text(encoding="utf-8")
     manifest = json.loads(
         (ROOT / "plugins" / "openclaw-xushi" / "openclaw.plugin.json").read_text(
             encoding="utf-8"
@@ -280,6 +302,7 @@ def test_openclaw_plugin_version_matches_app_and_bundled_copy() -> None:
     )
     app_version = pyproject.split('version = "', maxsplit=1)[1].split('"', maxsplit=1)[0]
 
+    assert f'__version__ = "{app_version}"' in init_py
     assert manifest["version"] == app_version
     assert package["version"] == app_version
 

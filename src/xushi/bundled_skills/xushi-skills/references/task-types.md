@@ -22,6 +22,8 @@ For drinking water, standing up, stretching, eye rest, walking breaks, breathing
 
 Use that default because these tasks are about elapsed time since the user actually completed the habit. If the user drinks water at 10:20, a two-hour interval should usually remind around 12:20, not at the next fixed calendar slot. If the user never confirms, xushi cannot know when to reset the interval.
 
+If the user says they completed the habit before the next reminder has fired, use task-level completion (`xushi_complete_task`, `xushi complete <task_id>`, or `POST /api/v1/tasks/{task_id}/complete`). xushi will create a manual completion anchor without sending a reminder, then calculate the next occurrence from that completion time.
+
 When the habit could disturb sleep or focus time, do not change it to calendar anchoring. Keep `anchor: "completion"` and rely on the user's global `quiet_policy` so reminders due during quiet windows become delayed deliveries and can be aggregated. If the user has no global quiet policy yet, ask whether they want one. Use task-level `quiet_policy.mode: "bypass"` only for explicit night reminders.
 
 Only use `anchor: "calendar"` for these habits when the user clearly says they want fixed wall-clock reminders such as "每天 9 点、11 点、13 点提醒我喝水". When unclear, ask whether the next reminder should follow fixed time slots or restart after confirmation.
@@ -30,6 +32,7 @@ Avoid these mistakes:
 
 - Do not model "每 2 小时喝水" as fixed calendar recurrence unless the user explicitly wants fixed slots.
 - Do not set `requires_confirmation: false` for habits whose next reminder depends on completion time.
+- Do not call `trigger` when the user reports early completion; `trigger` sends a reminder, while `complete` records completion.
 - Do not encode sleep windows inside `schedule`; quiet behavior belongs to delivery policy.
 - Do not treat `max_attempts: 0` as unlimited follow-up. In current xushi versions it means no follow-up.
 

@@ -34,6 +34,11 @@ ACTIVE_RUN_STATUSES = {
     RunStatus.PENDING_CONFIRMATION.value,
     RunStatus.FOLLOWING_UP.value,
 }
+COMPLETABLE_PRIMARY_RUN_STATUSES = {
+    RunStatus.PENDING_DELIVERY.value,
+    RunStatus.PENDING_CONFIRMATION.value,
+    RunStatus.FAILED.value,
+}
 DELIVERABLE_STATUSES = {DeliveryStatus.PENDING.value, DeliveryStatus.DELAYED.value}
 
 
@@ -119,7 +124,13 @@ class XushiService:
         self._cancel_open_runs_for_task(task_id, archived_at, "task_archived")
         return True
 
-    def trigger_task(self, task_id: str, now: datetime | None = None) -> Run:
+    def trigger_task(
+        self,
+        task_id: str,
+        now: datetime | None = None,
+        *,
+        process_delivery: bool = True,
+    ) -> Run:
         """手动触发任务。"""
         task = self.get_task(task_id)
         if task is None:
@@ -138,8 +149,10 @@ class XushiService:
         delivery = self._create_delivery(task, run, action, kind="reminder", due_at=scheduled_for)
         if delivery.status in {DeliveryStatus.SKIPPED, DeliveryStatus.SILENCED}:
             return self._complete_prevented_delivery(run, task, delivery, scheduled_for)
-        self.process_deliveries(scheduled_for)
-        return self.get_run(run.id) or run
+        if process_delivery:
+            self.process_deliveries(scheduled_for)
+            return self.get_run(run.id) or run
+        return run
 
     def confirm_run(self, run_id: str, now: datetime | None = None) -> Run | None:
         """确认运行记录已完成。"""
@@ -159,6 +172,45 @@ class XushiService:
         if latest is None:
             return None
         return self.confirm_run(latest.id, now)
+
+    def complete_task(self, task_id: str, now: datetime | None = None) -> Run | None:
+        """按任务记录完成，必要时为完成锚点创建手动 run。"""
+        task = self.get_task(task_id)
+        if task is None:
+            return None
+        if task.status != TaskStatus.ACTIVE:
+            return None
+        completed_at = now or datetime.now(tz=UTC)
+        latest = self.store.latest_unconfirmed_primary_run_for_task(
+            task_id,
+            COMPLETABLE_PRIMARY_RUN_STATUSES,
+        )
+        if latest is not None:
+            return self.lifecycle.confirm_success(
+                latest,
+                completed_at,
+                delivery_reason="task_completed",
+                result_update={"completion_source": "task_complete"},
+            )
+        if not self._uses_completion_anchor(task):
+            return None
+
+        run = Run(
+            id=f"run_{uuid4().hex}",
+            task_id=task.id,
+            scheduled_for=completed_at,
+            started_at=completed_at,
+            finished_at=completed_at,
+            status=RunStatus.SUCCEEDED,
+            confirmed_at=completed_at,
+            result={
+                "manual_completion": True,
+                "completion_source": "task_complete",
+            },
+        )
+        self.store.save_run(run)
+        self.metrics.increment("runs_created_total")
+        return run
 
     def callback_run(self, run_id: str, callback: RunCallback) -> Run | None:
         """根据外部执行器回调更新运行记录。"""
@@ -183,7 +235,15 @@ class XushiService:
                 last_scheduled_for,
                 last_completed_at,
             ):
-                created.append(self.trigger_task(task.id, now=scheduled_for))
+                created.append(
+                    self.trigger_task(
+                        task.id,
+                        now=scheduled_for,
+                        process_delivery=False,
+                    )
+                )
+        processed_deliveries.extend(self.process_deliveries(current))
+        created = [self.get_run(run.id) or run for run in created]
         follow_ups = self.process_follow_ups(current)
         created.extend(follow_ups)
         auto_retries = self._auto_retry_failed_deliveries(current)
@@ -220,7 +280,7 @@ class XushiService:
                 )
             )
 
-        groups: dict[tuple[str, str], list[Delivery]] = {}
+        groups: dict[tuple[str, ...], list[Delivery]] = {}
         for delivery in deliverable:
             task = self.get_task(delivery.task_id) if delivery.task_id else None
             if (
@@ -228,13 +288,25 @@ class XushiService:
                 and task is not None
                 and self.quiet_policy.should_aggregate(task)
             ):
-                key = (delivery.action.type, delivery.action.executor_id or "system")
+                key = ("quiet", delivery.action.type, delivery.action.executor_id or "system")
+                groups.setdefault(key, []).append(delivery)
+            elif task is not None and self._can_aggregate_pending_reminder(delivery, task):
+                key = self._pending_reminder_group_key(delivery)
                 groups.setdefault(key, []).append(delivery)
 
-        for group in groups.values():
-            if len(group) < 2:
+        for key, group in groups.items():
+            min_items = (
+                self.settings.reminder_aggregation.min_items
+                if key[0] == "same_minute"
+                else 2
+            )
+            if len(group) < min_items:
                 continue
-            digest = self._execute_digest(group, current)
+            digest = (
+                self._execute_pending_reminder_digest(group, current)
+                if key[0] == "same_minute"
+                else self._execute_digest(group, current)
+            )
             processed.append(digest)
             grouped_delivery_ids.update(delivery.id for delivery in group)
 
@@ -346,6 +418,7 @@ class XushiService:
         self.settings = replace(
             self.settings,
             quiet_policy=settings.quiet_policy,
+            reminder_aggregation=settings.reminder_aggregation,
             executors=settings.executors,
             auto_retry_failed_deliveries=settings.auto_retry_failed_deliveries,
             auto_retry_max_attempts=settings.auto_retry_max_attempts,
@@ -358,7 +431,12 @@ class XushiService:
             executor.id: executor for executor in settings.executors if executor.enabled
         }
         return {
-            "reloaded": ["executors", "quiet_policy", "auto_retry_policy"],
+            "reloaded": [
+                "executors",
+                "quiet_policy",
+                "reminder_aggregation",
+                "auto_retry_policy",
+            ],
             "restart_required": [
                 "api_token",
                 "database_path",
@@ -371,6 +449,7 @@ class XushiService:
             "executors": len(settings.executors),
             "enabled_executors": len(self._executor_map),
             "quiet_policy_enabled": settings.quiet_policy.enabled,
+            "reminder_aggregation_enabled": settings.reminder_aggregation.enabled,
             "auto_retry_failed_deliveries": settings.auto_retry_failed_deliveries,
             "auto_retry_max_attempts": settings.auto_retry_max_attempts,
         }
@@ -429,6 +508,33 @@ class XushiService:
             return True
         run = self.get_run(delivery.run_id)
         return run is not None and run.status == RunStatus.PENDING_DELIVERY
+
+    def _can_aggregate_pending_reminder(self, delivery: Delivery, task: Task) -> bool:
+        """判断普通待投递提醒是否可参与同分钟聚合。"""
+        policy = self.settings.reminder_aggregation
+        if not policy.enabled or not policy.include_pending:
+            return False
+        if delivery.status != DeliveryStatus.PENDING:
+            return False
+        if delivery.kind != "reminder" or delivery.action.type != "reminder":
+            return False
+        return not (task.quiet_policy.mode == "bypass" or task.schedule.expiry)
+
+    def _pending_reminder_group_key(self, delivery: Delivery) -> tuple[str, ...]:
+        """生成普通提醒聚合键。"""
+        policy = self.settings.reminder_aggregation
+        bucket = int(delivery.due_at.timestamp()) // policy.window_seconds
+        payload = delivery.action.payload
+        channel = str(payload.get("channel") or "")
+        recipient = str(payload.get("to") or payload.get("recipient") or "")
+        return (
+            "same_minute",
+            delivery.action.type,
+            delivery.action.executor_id or "system",
+            channel,
+            recipient,
+            str(bucket),
+        )
 
     def _cancel_delivery(
         self,
@@ -556,28 +662,38 @@ class XushiService:
         self._update_run_after_delivery(delivery, result, current)
         return delivery
 
-    def _execute_digest(self, deliveries: list[Delivery], current: datetime) -> Delivery:
+    def _execute_digest(
+        self,
+        deliveries: list[Delivery],
+        current: datetime,
+        *,
+        title: str = "序时免打扰摘要",
+        payload_kind: str = "digest",
+        max_items: int | None = None,
+        intro: str | None = None,
+    ) -> Delivery:
         """将多条延迟提醒合并成一条摘要投递。"""
         first = deliveries[0]
         items: list[tuple[str, datetime]] = []
         run_ids: list[str] = []
         for delivery in deliveries:
-            title = str(delivery.action.payload.get("title") or "序时提醒")
-            items.append((title, delivery.due_at))
+            item_title = str(delivery.action.payload.get("title") or "序时提醒")
+            items.append((item_title, delivery.due_at))
             if delivery.run_id:
                 run_ids.append(delivery.run_id)
 
         task = self.get_task(first.task_id) if first.task_id else None
-        max_items = 10
-        if task is not None:
-            max_items = self.quiet_policy.effective_policy(task).aggregation.max_items
+        if max_items is None:
+            max_items = 10
+            if task is not None:
+                max_items = self.quiet_policy.effective_policy(task).aggregation.max_items
         action = Action(
             type=first.action.type,
             executor_id=first.action.executor_id,
             payload={
-                "title": "序时免打扰摘要",
-                "message": summarize_deliveries(items, max_items),
-                "kind": "digest",
+                "title": title,
+                "message": summarize_deliveries(items, max_items, intro=intro),
+                "kind": payload_kind,
                 "run_ids": run_ids,
             },
         )
@@ -614,6 +730,23 @@ class XushiService:
             }
             self._update_run_after_delivery(delivery, result, current)
         return executed
+
+    def _execute_pending_reminder_digest(
+        self,
+        deliveries: list[Delivery],
+        current: datetime,
+    ) -> Delivery:
+        """将同分钟普通提醒合并成一条摘要投递。"""
+        policy = self.settings.reminder_aggregation
+        intro = f"同一时间有 {len(deliveries)} 条提醒, 已为你合并成这一条摘要."
+        return self._execute_digest(
+            deliveries,
+            current,
+            title="序时提醒摘要",
+            payload_kind="same_minute_digest",
+            max_items=policy.max_items,
+            intro=intro,
+        )
 
     def _update_run_after_delivery(
         self,

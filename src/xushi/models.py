@@ -111,6 +111,25 @@ class QuietAggregation(BaseModel):
     max_items: int = Field(default=10, ge=1, le=50)
 
 
+class ReminderAggregationPolicy(BaseModel):
+    """普通提醒轻量聚合策略。"""
+
+    enabled: bool = True
+    window_seconds: int = Field(default=60, ge=1, le=300)
+    min_items: int = Field(default=2, ge=2, le=50)
+    max_items: int = Field(default=10, ge=1, le=50)
+    include_pending: bool = True
+
+    @model_validator(mode="after")
+    def validate_item_bounds(self) -> ReminderAggregationPolicy:
+        """校验摘要展示上限不能小于聚合门槛。"""
+        if self.max_items < self.min_items:
+            raise ValueError(
+                "reminder aggregation max_items must be greater than or equal to min_items"
+            )
+        return self
+
+
 class QuietWindow(BaseModel):
     """免打扰时间窗口。"""
 
